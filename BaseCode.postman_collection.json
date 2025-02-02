@@ -369,13 +369,13 @@
 			"response": []
 		},
 		{
-			"name": "Reset Password Copy",
+			"name": "Update User Details",
 			"request": {
 				"method": "POST",
 				"header": [],
 				"body": {
 					"mode": "raw",
-					"raw": "{\r\n  \"UserId\": \"123\",\r\n  \"FirstName\": \"John\",\r\n  \"LastName\": \"Doe\",\r\n  \"UserName\": \"johndoe\"\r\n}",
+					"raw": "{\r\n  \"UserId\": \"4\",\r\n  \"FirstName\": \"John\",\r\n  \"LastName\": \"Doe\",\r\n  \"UserName\": \"johndoe\"\r\n}",
 					"options": {
 						"raw": {
 							"language": "json"
