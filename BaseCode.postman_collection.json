@@ -1,0 +1,390 @@
+{
+	"info": {
+		"_postman_id": "561e26bb-f22e-4e64-9727-b6f0d2e99d48",
+		"name": "BaseCode",
+		"schema": "https://schema.getpostman.com/json/collection/v2.0.0/collection.json",
+		"_exporter_id": "41586796"
+	},
+	"item": [
+		{
+			"name": "Create User",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n\r\n \"FirstName\":\"Kenneth\",\r\n \"LastName\":\"Quizon\",\r\n \"UserName\":\"Kennethzky\",\r\n \"Password\":\"Abc123\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:5001/BaseCode/CreateUser"
+			},
+			"response": [
+				{
+					"name": "http://localhost:5001/BaseCode/CreateUser",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n \"FirstName\":\"Kenneth\",\r\n \"lastName\":\"Quizon\",\r\n \"UserName\":\"Neth\",\r\n \"Password\":\"Abc123\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://localhost:5001/BaseCode/CreateUser"
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Date",
+							"value": "Sun, 16 Aug 2020 08:37:36 GMT"
+						},
+						{
+							"key": "Content-Type",
+							"value": "application/json; charset=utf-8"
+						},
+						{
+							"key": "Server",
+							"value": "Kestrel"
+						},
+						{
+							"key": "Transfer-Encoding",
+							"value": "chunked"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"isSuccess\": true,\n    \"Message\": \" Successfully created user.\",\n    \"UserId\": 1\n}"
+				}
+			]
+		},
+		{
+			"name": "Create User Copy",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "Naka dictionary\r\n\r\nnaka sting si user id sa base code\r\n\r\nnaka AND active status\r\n\r\n",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:5001/BaseCode/CreateUser"
+			},
+			"response": [
+				{
+					"name": "http://localhost:5001/BaseCode/CreateUser",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n \"FirstName\":\"Kenneth\",\r\n \"lastName\":\"Quizon\",\r\n \"UserName\":\"Neth\",\r\n \"Password\":\"Abc123\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://localhost:5001/BaseCode/CreateUser"
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Date",
+							"value": "Sun, 16 Aug 2020 08:37:36 GMT"
+						},
+						{
+							"key": "Content-Type",
+							"value": "application/json; charset=utf-8"
+						},
+						{
+							"key": "Server",
+							"value": "Kestrel"
+						},
+						{
+							"key": "Transfer-Encoding",
+							"value": "chunked"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"isSuccess\": true,\n    \"Message\": \" Successfully created user.\",\n    \"UserId\": 1\n}"
+				}
+			]
+		},
+		{
+			"name": "Create User Copy",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n\r\n \"FirstName\":\"Kenneth\",\r\n \"LastName\":\"Quizon\",\r\n \"UserName\":\"Kennethzky\",\r\n \"Password\":\"Abc123\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:5001/BaseCode/CreateUser"
+			},
+			"response": [
+				{
+					"name": "http://localhost:5001/BaseCode/CreateUser",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n \"FirstName\":\"Kenneth\",\r\n \"lastName\":\"Quizon\",\r\n \"UserName\":\"Neth\",\r\n \"Password\":\"Abc123\"\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://localhost:5001/BaseCode/CreateUser"
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Date",
+							"value": "Sun, 16 Aug 2020 08:37:36 GMT"
+						},
+						{
+							"key": "Content-Type",
+							"value": "application/json; charset=utf-8"
+						},
+						{
+							"key": "Server",
+							"value": "Kestrel"
+						},
+						{
+							"key": "Transfer-Encoding",
+							"value": "chunked"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"isSuccess\": true,\n    \"Message\": \" Successfully created user.\",\n    \"UserId\": 1\n}"
+				}
+			]
+		},
+		{
+			"name": "Get User List",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:5001/BaseCode/GetUserList"
+			},
+			"response": [
+				{
+					"name": "Get User List",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\r\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": "http://localhost:5001/BaseCode/GetUserList"
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Date",
+							"value": "Sun, 16 Aug 2020 11:31:20 GMT"
+						},
+						{
+							"key": "Content-Type",
+							"value": "application/json; charset=utf-8"
+						},
+						{
+							"key": "Server",
+							"value": "Kestrel"
+						},
+						{
+							"key": "Transfer-Encoding",
+							"value": "chunked"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"isSuccess\": true,\n    \"Message\": \"List Of Users\",\n    \"UsersList\": [\n        {\n            \"UserId\": 1,\n            \"FirstName\": \"Kenneth\",\n            \"LastName\": \"Quizon\",\n            \"UserName\": \"Neth\",\n            \"Status\": \"ACTIVE\"\n        },\n        {\n            \"UserId\": 2,\n            \"FirstName\": \"Mackie\",\n            \"LastName\": \"Ortiz\",\n            \"UserName\": \"Mack\",\n            \"Status\": \"ACTIVE\"\n        }\n    ]\n}"
+				}
+			]
+		},
+		{
+			"name": "Update User",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n \"UserId\":1,\r\n \"FirstName\":\"Kenneth\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:5001/BaseCode/UpdateUser"
+			},
+			"response": []
+		},
+		{
+			"name": "Delete User",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n \"UserId\":1,\r\n \"FirstName\":\"Kenneth\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:5001/BaseCode/UpdateUser"
+			},
+			"response": []
+		},
+		{
+			"name": "GetUserByUserId",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"UserId\": \"4\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "http://localhost:5001/BaseCode/GetUserByUserId",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "5001",
+					"path": [
+						"BaseCode",
+						"GetUserByUserId"
+					],
+					"query": [
+						{
+							"key": "userId",
+							"value": "9",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Register User",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"firstName\": \"John\",\r\n    \"middleName\": \"Doe\",\r\n    \"lastName\": \"Smith\",\r\n    \"age\": 25,\r\n    \"birthday\": \"1998-01-15\",\r\n    \"phoneNumber\": \"1234567890\",\r\n    \"userName\": \"johnsmith\",\r\n    \"password\": \"password123\",\r\n    \"houseNo\": \"123\",\r\n    \"barangay\": \"Sample Barangay\",\r\n    \"city\": \"Sample City\",\r\n    \"province\": \"Sample Province\",\r\n    \"zip\": \"12345\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:5001/BaseCode/RegisterUser"
+			},
+			"response": []
+		},
+		{
+			"name": "Login",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"UserName\" : \"johnsmith\",\r\n    \"Password\" : \"password123\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:5001/BaseCode/Login"
+			},
+			"response": []
+		},
+		{
+			"name": "Reset Password",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n    \"UserId\" : \"4\",\r\n    \"NewPassword\" : \"ARGH\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:5001/BaseCode/ResetPassword"
+			},
+			"response": []
+		},
+		{
+			"name": "Reset Password Copy",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\r\n  \"UserId\": \"123\",\r\n  \"FirstName\": \"John\",\r\n  \"LastName\": \"Doe\",\r\n  \"UserName\": \"johndoe\"\r\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": "http://localhost:5001/BaseCode/UpdateUserDetails"
+			},
+			"response": []
+		}
+	]
+}
