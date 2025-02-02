@@ -31,7 +31,7 @@ namespace BaseCode.Models
         public string ConnectionString { get; set; }
         public DBContext(string connStr)
         {
-            this.ConnectionString = connStr;            
+            this.ConnectionString = connStr;
         }
         private MySqlConnection GetConnection()
         {
@@ -79,8 +79,8 @@ namespace BaseCode.Models
 
                     MySqlCommand cmd = new MySqlCommand("INSERT INTO USER (FIRST_NAME,LAST_NAME,USER_NAME,PASSWORD) " +
                     "VALUES ('" + r.FirstName + "','" + r.LastName + "','" + r.UserName + "','" + r.Password + "');", conn);
-                    
-                  //  cmd.Parameters.Add(new MySqlParameter("@FIRST_NAME", r.FirstName));
+
+                    //  cmd.Parameters.Add(new MySqlParameter("@FIRST_NAME", r.FirstName));
                     cmd.Parameters.Add(new MySqlParameter("@LAST_NAME", r.LastName));
                     cmd.Parameters.Add(new MySqlParameter("@USER_NAME", r.UserName));
                     cmd.Parameters.Add(new MySqlParameter("@PASSWORD", r.Password));
@@ -90,7 +90,7 @@ namespace BaseCode.Models
                     conn.Close();
                 }
             }
-             
+
             catch (Exception ex)
             {
                 resp.Message = "Please try again.";
@@ -112,24 +112,24 @@ namespace BaseCode.Models
             try
             {
 
-             using (MySqlConnection conn = GetConnection())
+                using (MySqlConnection conn = GetConnection())
 
-             {
-                conn.Open();
+                {
+                    conn.Open();
 
 
-                MySqlCommand cmd = new MySqlCommand("UPDATE USER SET FIRST_NAME = @FIRST_NAME, LAST_NAME = @LAST_NAME, USER_NAME = @USER_NAME, PASSWORD = @PASSWORD " +
-                "WHERE USER_ID = @USER_ID;", conn);
-                cmd.Parameters.Add(new MySqlParameter("@FIRST_NAME", r.FirstName));
-                cmd.Parameters.Add(new MySqlParameter("@LAST_NAME", r.LastName));
-                cmd.Parameters.Add(new MySqlParameter("@USER_NAME", r.UserName));
-                cmd.Parameters.Add(new MySqlParameter("@USER_ID", r.UserId));
+                    MySqlCommand cmd = new MySqlCommand("UPDATE USER SET FIRST_NAME = @FIRST_NAME, LAST_NAME = @LAST_NAME, USER_NAME = @USER_NAME, PASSWORD = @PASSWORD " +
+                    "WHERE USER_ID = @USER_ID;", conn);
+                    cmd.Parameters.Add(new MySqlParameter("@FIRST_NAME", r.FirstName));
+                    cmd.Parameters.Add(new MySqlParameter("@LAST_NAME", r.LastName));
+                    cmd.Parameters.Add(new MySqlParameter("@USER_NAME", r.UserName));
+                    cmd.Parameters.Add(new MySqlParameter("@USER_ID", r.UserId));
                     cmd.Parameters.Add(new MySqlParameter("@PASSWORD", r.Password));
 
                     cmd.ExecuteNonQuery();
 
-                conn.Close();
-             }   
+                    conn.Close();
+                }
             }
             catch (Exception ex)
             {
@@ -175,7 +175,7 @@ namespace BaseCode.Models
             resp.Message = "Successfully deleted user.";
             return resp;
         }
-        public GetUserListResponse GetUserList(GetUserListRequest r )
+        public GetUserListResponse GetUserList(GetUserListRequest r)
         {
             GetUserListResponse resp = new GetUserListResponse();
             resp.Data = new List<Dictionary<string, string>>();
@@ -375,6 +375,222 @@ namespace BaseCode.Models
             return resp;
         }
 
+        public CreateUserResponse RegisterUser(RegisterUserRequest r)
+        {
+            CreateUserResponse resp = new CreateUserResponse();
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    MySqlTransaction transaction = conn.BeginTransaction();
 
+                    try
+                    {
+                        MySqlCommand userCmd = new MySqlCommand(
+                            "INSERT INTO USER (FIRST_NAME, MIDDLE_NAME, LAST_NAME, AGE, BIRTHDAY, PHONE_NUMBER, USER_NAME, PASSWORD) " +
+                            "VALUES (@FirstName, @MiddleName, @LastName, @Age, @Birthday, @PhoneNumber, @UserName, @Password);", conn);
+
+                        userCmd.Parameters.AddWithValue("@FirstName", r.FirstName);
+                        userCmd.Parameters.AddWithValue("@MiddleName", r.MiddleName ?? (object)DBNull.Value);
+                        userCmd.Parameters.AddWithValue("@LastName", r.LastName);
+                        userCmd.Parameters.AddWithValue("@Age", r.Age.HasValue ? (object)r.Age.Value : DBNull.Value);
+                        userCmd.Parameters.AddWithValue("@Birthday", r.Birthday.HasValue ? (object)r.Birthday.Value : DBNull.Value);
+                        userCmd.Parameters.AddWithValue("@PhoneNumber", r.PhoneNumber ?? (object)DBNull.Value);
+                        userCmd.Parameters.AddWithValue("@UserName", r.UserName);
+                        userCmd.Parameters.AddWithValue("@Password", r.Password);
+
+                        userCmd.ExecuteNonQuery();
+                        int userId = (int)userCmd.LastInsertedId;
+
+                        MySqlCommand addressCmd = new MySqlCommand(
+                            "INSERT INTO ADDRESS (USER_ID, HOUSE_NO, BARANGAY, CITY, PROVINCE, ZIP) " +
+                            "VALUES (@UserId, @HouseNo, @Barangay, @City, @Province, @Zip);", conn);
+
+                        addressCmd.Parameters.AddWithValue("@UserId", userId);
+                        addressCmd.Parameters.AddWithValue("@HouseNo", r.HouseNo ?? (object)DBNull.Value);
+                        addressCmd.Parameters.AddWithValue("@Barangay", r.Barangay ?? (object)DBNull.Value);
+                        addressCmd.Parameters.AddWithValue("@City", r.City ?? (object)DBNull.Value);
+                        addressCmd.Parameters.AddWithValue("@Province", r.Province ?? (object)DBNull.Value);
+                        addressCmd.Parameters.AddWithValue("@Zip", r.Zip ?? (object)DBNull.Value);
+
+                        addressCmd.ExecuteNonQuery();
+
+                        transaction.Commit();
+                        resp.UserId = userId;
+                        resp.isSuccess = true;
+                        resp.Message = "User registered successfully.";
+                    }
+                    catch (Exception ex)
+                    {
+                        transaction.Rollback();
+                        throw ex;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                resp.isSuccess = false;
+                resp.Message = "Registration failed: " + ex.Message;
+            }
+            return resp;
+        }
+
+        public LoginResponse LoginUser(LoginRequest req)
+        {
+            LoginResponse resp = new LoginResponse();
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    MySqlCommand cmd = new MySqlCommand(
+                        "SELECT USER_ID, FIRST_NAME, LAST_NAME FROM USER WHERE USER_NAME = @UserName AND PASSWORD = @Password AND STATUS = 'A';", conn);
+                    cmd.Parameters.AddWithValue("@UserName", req.UserName);
+                    cmd.Parameters.AddWithValue("@Password", req.Password);
+
+                    var reader = cmd.ExecuteReader();
+                    if (reader.HasRows)
+                    {
+                        DataTable dt = new DataTable();
+                        dt.Load(reader);
+                        var row = dt.Rows[0];
+                        resp.UserId = Convert.ToInt32(row["USER_ID"]);
+                        resp.FirstName = row["FIRST_NAME"].ToString();
+                        resp.LastName = row["LAST_NAME"].ToString();
+                        resp.isSuccess = true;
+                        resp.Message = "Login successful.";
+                    }
+                    else
+                    {
+                        resp.isSuccess = false;
+                        resp.Message = "Invalid credentials.";
+                    }
+                    conn.Close();
+                }
+            }
+            catch (Exception ex)
+            {
+                resp.isSuccess = false;
+                resp.Message = "Error: " + ex.Message;
+            }
+            return resp;
+        }
+
+        public ResetPasswordResponse ResetPassword(Models.Requests.ResetPasswordRequest req)
+        {
+            var resp = new Models.Responses.ResetPasswordResponse();
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    MySqlCommand cmd = new MySqlCommand(
+                        "UPDATE USER SET PASSWORD = @NewPassword WHERE USER_ID = @UserId;", conn);
+                    cmd.Parameters.AddWithValue("@NewPassword", req.NewPassword);
+                    cmd.Parameters.AddWithValue("@UserId", req.UserId);
+
+                    int rows = cmd.ExecuteNonQuery();
+                    if (rows > 0)
+                    {
+                        resp.isSuccess = true;
+                        resp.Message = "Password reset successfully.";
+                    }
+                    else
+                    {
+                        resp.isSuccess = false;
+                        resp.Message = "User not found or password not updated.";
+                    }
+                    conn.Close();
+                }
+            }
+            catch (Exception ex)
+            {
+                resp.isSuccess = false;
+                resp.Message = "Error: " + ex.Message;
+            }
+            return resp;
+        }
+
+        public UpdateUserDetailsResponse UpdateUserDetails(Models.Requests.UpdateUserDetailsRequest req)
+        {
+            var resp = new Models.Responses.UpdateUserDetailsResponse();
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    
+                    string query = "UPDATE USER SET FIRST_NAME = @FirstName, LAST_NAME = @LastName, USER_NAME = @UserName WHERE USER_ID = @UserId;";
+                    
+                    MySqlCommand cmd = new MySqlCommand(query, conn);
+                    cmd.Parameters.AddWithValue("@FirstName", req.FirstName);
+                    cmd.Parameters.AddWithValue("@LastName", req.LastName);
+                    cmd.Parameters.AddWithValue("@UserName", req.UserName);
+                    cmd.Parameters.AddWithValue("@UserId", req.UserId);
+                    
+                    int rows = cmd.ExecuteNonQuery();
+                    if (rows > 0)
+                    {
+                        resp.isSuccess = true;
+                        resp.Message = "User details updated successfully.";
+                    }
+                    else
+                    {
+                        resp.isSuccess = false;
+                        resp.Message = "User not found or no changes made.";
+                    }
+                    conn.Close();
+                }
+            }
+            catch (Exception ex)
+            {
+                resp.isSuccess = false;
+                resp.Message = "Error: " + ex.Message;
+            }
+            return resp;
+        }
+
+        public GetUserByUserIdResponse GetUserByUserId(Models.Requests.GetUserByUserIdRequest req)
+        {
+            var resp = new Models.Responses.GetUserByUserIdResponse();
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    MySqlCommand cmd = new MySqlCommand("SELECT * FROM USER WHERE USER_ID = @UserId;", conn);
+                    cmd.Parameters.AddWithValue("@UserId", req.UserId);
+                    var reader = cmd.ExecuteReader();
+                    if (reader.HasRows)
+                    {
+                        var dt = new System.Data.DataTable();
+                        dt.Load(reader);
+                        reader.Close();
+                        var row = dt.Rows[0];
+                        var userDict = new System.Collections.Generic.Dictionary<string, string>();
+                        foreach (System.Data.DataColumn col in dt.Columns)
+                        {
+                            userDict[col.ColumnName] = row[col].ToString();
+                        }
+                        resp.Data = userDict;
+                        resp.isSuccess = true;
+                        resp.Message = "User retrieved successfully.";
+                    }
+                    else
+                    {
+                        resp.isSuccess = false;
+                        resp.Message = "User not found.";
+                    }
+                    conn.Close();
+                }
+            }
+            catch (System.Exception ex)
+            {
+                resp.isSuccess = false;
+                resp.Message = "Error: " + ex.Message;
+            }
+            return resp;
+        }
     }
 }

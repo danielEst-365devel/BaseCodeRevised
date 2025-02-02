@@ -15,7 +15,7 @@ using BaseCode.Models;
 
 namespace BaseCode.Controllers
 {
-    [ApiController] 
+    [ApiController]
     [Route("[controller]")]
     public class BaseCodeController : Controller
     {
@@ -64,7 +64,7 @@ namespace BaseCode.Controllers
                 return BadRequest(resp);
             }
             resp = db.CreateUserUsingSqlScript(r);
-           // resp = db.CreateUserUsingSqlScript(r);
+            // resp = db.CreateUserUsingSqlScript(r);
 
             if (resp.isSuccess)
                 return Ok(resp);
@@ -90,7 +90,7 @@ namespace BaseCode.Controllers
             else
                 return BadRequest(resp);
         }
-       
+
         [HttpPost("DeleteUser")]
         public IActionResult DeleteUser([FromBody] CreateUserRequest r)
         {
@@ -113,7 +113,7 @@ namespace BaseCode.Controllers
         public IActionResult GetUserList([FromBody] GetUserListRequest r)
         {
             GetUserListResponse resp = new GetUserListResponse();
-       
+
             resp = db.GetUserList(r);
 
             if (resp.isSuccess)
@@ -184,5 +184,82 @@ namespace BaseCode.Controllers
                 return NotFound(resp);
         }
 
+        [HttpPost("RegisterUser")]
+        public IActionResult RegisterUser([FromBody] RegisterUserRequest r)
+        {
+            if (string.IsNullOrEmpty(r.FirstName))
+                return BadRequest(new { Message = "First name is required." });
+
+            if (string.IsNullOrEmpty(r.LastName))
+                return BadRequest(new { Message = "Last name is required." });
+
+            if (string.IsNullOrEmpty(r.UserName))
+                return BadRequest(new { Message = "Username is required." });
+
+            if (string.IsNullOrEmpty(r.Password))
+                return BadRequest(new { Message = "Password is required." });
+
+            var resp = db.RegisterUser(r);
+
+            if (resp.isSuccess)
+                return Ok(resp);
+            else
+                return BadRequest(resp);
+        }
+
+        [HttpPost("Login")]
+        public IActionResult Login([FromBody] BaseCode.Models.Requests.LoginRequest req)
+        {
+            if (string.IsNullOrEmpty(req.UserName) || string.IsNullOrEmpty(req.Password))
+                return BadRequest(new { Message = "Username and Password are required." });
+
+            var resp = db.LoginUser(req);
+            if (resp.isSuccess)
+                return Ok(resp);
+            else
+                return Unauthorized(resp);
+        }
+
+        [HttpPost("ResetPassword")]
+        public IActionResult ResetPassword([FromBody] BaseCode.Models.Requests.ResetPasswordRequest req)
+        {
+            if (string.IsNullOrEmpty(req.UserId) || string.IsNullOrEmpty(req.NewPassword))
+                return BadRequest(new { Message = "Valid UserId and NewPassword are required." });
+
+            var resp = db.ResetPassword(req);
+            if (resp.isSuccess)
+                return Ok(resp);
+            else
+                return BadRequest(resp);
+        }
+
+        [HttpPost("UpdateUserDetails")]
+        public IActionResult UpdateUserDetails([FromBody] BaseCode.Models.Requests.UpdateUserDetailsRequest req)
+        {
+            if (string.IsNullOrEmpty(req.UserId) || 
+                string.IsNullOrEmpty(req.FirstName) || 
+                string.IsNullOrEmpty(req.LastName) || 
+                string.IsNullOrEmpty(req.UserName))
+                return BadRequest(new { Message = "UserId, FirstName, LastName and UserName are required." });
+            
+            var resp = db.UpdateUserDetails(req);
+            if (resp.isSuccess)
+                return Ok(resp);
+            else
+                return BadRequest(resp);
+        }
+
+        [HttpPost("GetUserByUserId")]
+        public IActionResult GetUserByUserId([FromBody] BaseCode.Models.Requests.GetUserByUserIdRequest req)
+        {
+            if (string.IsNullOrEmpty(req.UserId))
+                return BadRequest(new { Message = "UserId is required." });
+            
+            var resp = db.GetUserByUserId(req);
+            if (resp.isSuccess)
+                return Ok(resp);
+            else
+                return NotFound(resp);
+        }
     }
 }
