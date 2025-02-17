@@ -21,8 +21,10 @@ using Microsoft.AspNetCore.Mvc.ModelBinding.Binders;
 using BaseCode.Models.Responses;
 using BaseCode.Models.Requests;
 using BaseCode.Models.Tables;
-//TEST CMMENT FOR COMMIT
 using System.Reflection;
+using Twilio;
+using Twilio.Rest.Api.V2010.Account;
+using Twilio.Types;
 
 namespace BaseCode.Models
 {
@@ -477,7 +479,7 @@ namespace BaseCode.Models
             return resp;
         }
 
-        public ResetPasswordResponse ResetPassword(Models.Requests.ResetPasswordRequest req)
+        public ResetPasswordResponse ResetPassword(ResetPasswordRequest req)
         {
             var resp = new Models.Responses.ResetPasswordResponse();
             try
@@ -512,7 +514,7 @@ namespace BaseCode.Models
             return resp;
         }
 
-        public UpdateUserDetailsResponse UpdateUserDetails(Models.Requests.UpdateUserDetailsRequest req)
+        public UpdateUserDetailsResponse UpdateUserDetails(UpdateUserDetailsRequest req)
         {
             var resp = new Models.Responses.UpdateUserDetailsResponse();
             try
@@ -551,7 +553,7 @@ namespace BaseCode.Models
             return resp;
         }
 
-        public GetUserByUserIdResponse GetUserByUserId(Models.Requests.GetUserByUserIdRequest req)
+        public GetUserByUserIdResponse GetUserByUserId(GetUserByUserIdRequest req)
         {
             var resp = new Models.Responses.GetUserByUserIdResponse();
             try
@@ -586,6 +588,143 @@ namespace BaseCode.Models
                 }
             }
             catch (System.Exception ex)
+            {
+                resp.isSuccess = false;
+                resp.Message = "Error: " + ex.Message;
+            }
+            return resp;
+        }
+
+        // Helper method to generate an 8-character alphanumeric OTP
+        private string GenerateOtp()
+        {
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            var random = new Random();
+            char[] otp = new char[8];
+            for (int i = 0; i < otp.Length; i++)
+                otp[i] = chars[random.Next(chars.Length)];
+            return new string(otp);
+        }
+
+        public SendOtpResponse SendResetPasswordOtp(SendOtpRequest r)
+        {
+            SendOtpResponse resp = new SendOtpResponse();
+            string otp = GenerateOtp();
+            DateTime now = DateTime.Now;
+            try
+            {
+                using (var conn = GetConnection())
+                {
+                    conn.Open();
+
+                    var userCmd = new MySqlCommand("SELECT PHONE_NUMBER FROM USER WHERE USER_ID=@CustomerId;", conn);
+                    userCmd.Parameters.AddWithValue("@CustomerId", r.CustomerId);
+                    object result = userCmd.ExecuteScalar();
+                    string dbPhoneNumber = result?.ToString();
+
+                    if (string.IsNullOrEmpty(dbPhoneNumber))
+                    {
+                        resp.isSuccess = false;
+                        resp.Message = "No phone number found for the provided CustomerId.";
+                        return resp;
+                    }
+
+                    var expireCmd = new MySqlCommand("UPDATE CUSTOMER_OTP SET STATUS='E' WHERE CUSTOMER_ID=@CustomerId AND STATUS='A';", conn);
+                    expireCmd.Parameters.AddWithValue("@CustomerId", r.CustomerId);
+                    expireCmd.ExecuteNonQuery();
+                    
+
+                    TwilioClient.Init(accountSid, authToken);
+                    var messageOptions = new CreateMessageOptions(new PhoneNumber(dbPhoneNumber))
+                    {
+                        From = new PhoneNumber("+12769001832"),
+                        Body = $"Your OTP is: {otp}"
+                    };
+                    var message = MessageResource.Create(messageOptions);
+                    
+                    if (string.IsNullOrEmpty(message.Sid))
+                    {
+                        resp.isSuccess = false;
+                        resp.Message = "Failed to send SMS.";
+                        return resp;
+                    }
+                    
+                    var insertCmd = new MySqlCommand("INSERT INTO CUSTOMER_OTP (CUSTOMER_ID, OTP, STATUS, CREATED_AT) VALUES (@CustomerId, @OTP, 'A', @CreatedAt);", conn);
+                    insertCmd.Parameters.AddWithValue("@CustomerId", r.CustomerId);
+                    insertCmd.Parameters.AddWithValue("@OTP", otp);
+                    insertCmd.Parameters.AddWithValue("@CreatedAt", now);
+                    insertCmd.ExecuteNonQuery();
+                    conn.Close();
+
+                    resp.isSuccess = true;
+                    resp.Message = "OTP sent successfully.";
+                }
+            }
+            catch (Exception ex)
+            {
+                resp.isSuccess = false;
+                resp.Message = "Error: " + ex.Message;
+            }
+            return resp;
+        }
+
+        public ConfirmOtpResponse ConfirmResetPasswordOtp(ConfirmOtpRequest r)
+        {
+            ConfirmOtpResponse resp = new ConfirmOtpResponse();
+            try
+            {
+                using (var conn = GetConnection())
+                {
+                    conn.Open();
+                    var selectCmd = new MySqlCommand("SELECT OTP, CREATED_AT FROM CUSTOMER_OTP WHERE CUSTOMER_ID=@CustomerId AND STATUS='A' ORDER BY CREATED_AT DESC LIMIT 1;", conn);
+                    selectCmd.Parameters.AddWithValue("@CustomerId", r.CustomerId);
+                    var reader = selectCmd.ExecuteReader();
+                    if (reader.Read())
+                    {
+                        string dbOtp = reader["OTP"].ToString();
+                        DateTime createdAt = Convert.ToDateTime(reader["CREATED_AT"]);
+                        reader.Close();
+
+                        if ((DateTime.Now - createdAt).TotalMinutes > 1)
+                        {
+                            var expireCmd = new MySqlCommand("UPDATE CUSTOMER_OTP SET STATUS='E' WHERE CUSTOMER_ID=@CustomerId AND OTP=@OTP;", conn);
+                            expireCmd.Parameters.AddWithValue("@CustomerId", r.CustomerId);
+                            expireCmd.Parameters.AddWithValue("@OTP", dbOtp);
+                            expireCmd.ExecuteNonQuery();
+
+                            resp.isSuccess = false;
+                            resp.Message = "OTP expired.";
+                        }
+                        else if (dbOtp == r.OTP)
+                        {
+                            var useCmd = new MySqlCommand("UPDATE CUSTOMER_OTP SET STATUS='U' WHERE CUSTOMER_ID=@CustomerId AND OTP=@OTP;", conn);
+                            useCmd.Parameters.AddWithValue("@CustomerId", r.CustomerId);
+                            useCmd.Parameters.AddWithValue("@OTP", r.OTP);
+                            useCmd.ExecuteNonQuery();
+
+                            var updateUserCmd = new MySqlCommand("UPDATE USER SET PASSWORD=@NewPassword WHERE USER_ID=@CustomerId;", conn);
+                            updateUserCmd.Parameters.AddWithValue("@NewPassword", r.NewPassword);
+                            updateUserCmd.Parameters.AddWithValue("@CustomerId", r.CustomerId);
+                            updateUserCmd.ExecuteNonQuery();
+
+                            resp.isSuccess = true;
+                            resp.Message = "OTP confirmed and password changed.";
+                        }
+                        else
+                        {
+                            resp.isSuccess = false;
+                            resp.Message = "Invalid OTP.";
+                        }
+                    }
+                    else
+                    {
+                        resp.isSuccess = false;
+                        resp.Message = "No active OTP found.";
+                    }
+                    conn.Close();
+                }
+            }
+            catch (Exception ex)
             {
                 resp.isSuccess = false;
                 resp.Message = "Error: " + ex.Message;
