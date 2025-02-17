@@ -208,7 +208,7 @@ namespace BaseCode.Controllers
         }
 
         [HttpPost("Login")]
-        public IActionResult Login([FromBody] BaseCode.Models.Requests.LoginRequest req)
+        public IActionResult Login([FromBody] LoginRequest req)
         {
             if (string.IsNullOrEmpty(req.UserName) || string.IsNullOrEmpty(req.Password))
                 return BadRequest(new { Message = "Username and Password are required." });
@@ -221,7 +221,7 @@ namespace BaseCode.Controllers
         }
 
         [HttpPost("ResetPassword")]
-        public IActionResult ResetPassword([FromBody] BaseCode.Models.Requests.ResetPasswordRequest req)
+        public IActionResult ResetPassword([FromBody] ResetPasswordRequest req)
         {
             if (string.IsNullOrEmpty(req.UserId) || string.IsNullOrEmpty(req.NewPassword))
                 return BadRequest(new { Message = "Valid UserId and NewPassword are required." });
@@ -234,14 +234,14 @@ namespace BaseCode.Controllers
         }
 
         [HttpPost("UpdateUserDetails")]
-        public IActionResult UpdateUserDetails([FromBody] BaseCode.Models.Requests.UpdateUserDetailsRequest req)
+        public IActionResult UpdateUserDetails([FromBody] UpdateUserDetailsRequest req)
         {
-            if (string.IsNullOrEmpty(req.UserId) || 
-                string.IsNullOrEmpty(req.FirstName) || 
-                string.IsNullOrEmpty(req.LastName) || 
+            if (string.IsNullOrEmpty(req.UserId) ||
+                string.IsNullOrEmpty(req.FirstName) ||
+                string.IsNullOrEmpty(req.LastName) ||
                 string.IsNullOrEmpty(req.UserName))
                 return BadRequest(new { Message = "UserId, FirstName, LastName and UserName are required." });
-            
+
             var resp = db.UpdateUserDetails(req);
             if (resp.isSuccess)
                 return Ok(resp);
@@ -250,16 +250,42 @@ namespace BaseCode.Controllers
         }
 
         [HttpPost("GetUserByUserId")]
-        public IActionResult GetUserByUserId([FromBody] BaseCode.Models.Requests.GetUserByUserIdRequest req)
+        public IActionResult GetUserByUserId([FromBody] GetUserByUserIdRequest req)
         {
             if (string.IsNullOrEmpty(req.UserId))
                 return BadRequest(new { Message = "UserId is required." });
-            
+
             var resp = db.GetUserByUserId(req);
             if (resp.isSuccess)
                 return Ok(resp);
             else
                 return NotFound(resp);
+        }
+
+        [HttpPost("SendResetPasswordOtp")]
+        public IActionResult SendResetPasswordOtp([FromBody] SendOtpRequest r)
+        {
+            if (string.IsNullOrEmpty(r.CustomerId))
+                return BadRequest(new { Message = "Valid CustomerId is required." });
+
+            var resp = db.SendResetPasswordOtp(r);
+            if (resp.isSuccess)
+                return Ok(resp);
+            else
+                return BadRequest(resp);
+        }
+
+        [HttpPost("ConfirmOtp")]
+        public IActionResult ConfirmOtp([FromBody] ConfirmOtpRequest r)
+        {
+            if (string.IsNullOrEmpty(r.CustomerId) || string.IsNullOrEmpty(r.OTP) || string.IsNullOrEmpty(r.NewPassword))
+                return BadRequest(new { Message = "CustomerId, OTP and NewPassword are required." });
+
+            var resp = db.ConfirmResetPasswordOtp(r);
+            if (resp.isSuccess)
+                return Ok(resp);
+            else
+                return BadRequest(resp);
         }
     }
 }
