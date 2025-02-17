@@ -632,7 +632,9 @@ namespace BaseCode.Models
                     var expireCmd = new MySqlCommand("UPDATE CUSTOMER_OTP SET STATUS='E' WHERE CUSTOMER_ID=@CustomerId AND STATUS='A';", conn);
                     expireCmd.Parameters.AddWithValue("@CustomerId", r.CustomerId);
                     expireCmd.ExecuteNonQuery();
-                    
+
+                    var accountSid = Environment.GetEnvironmentVariable("TWILIO_ACCOUNT_SID");
+                    var authToken = Environment.GetEnvironmentVariable("TWILIO_AUTH_TOKEN");
 
                     TwilioClient.Init(accountSid, authToken);
                     var messageOptions = new CreateMessageOptions(new PhoneNumber(dbPhoneNumber))
