@@ -74,8 +74,8 @@ namespace BaseCode.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var response = db.LoginCustomer(request);
-        
+            var response = db.LoginCustomerWithCookie(request);
+
             if (response.isSuccess)
             {
                 var jwtSettings = _configuration.GetSection("JwtSettings");
@@ -91,7 +91,9 @@ namespace BaseCode.Controllers
                         new Claim(ClaimTypes.GivenName, response.FirstName),
                         new Claim(ClaimTypes.Surname, response.LastName)
                     }),
-                    Expires = DateTime.UtcNow.AddMinutes(double.Parse(jwtSettings["ExpirationInMinutes"])),
+                    Expires = request.RememberMe ? 
+                        DateTime.UtcNow.AddDays(14) : // 2 weeks for remember me
+                        DateTime.UtcNow.AddDays(1),   // 1 day default
                     Issuer = jwtSettings["Issuer"],
                     Audience = jwtSettings["Audience"],
                     SigningCredentials = new SigningCredentials(
@@ -101,6 +103,64 @@ namespace BaseCode.Controllers
 
                 var token = tokenHandler.CreateToken(tokenDescriptor);
                 response.Token = tokenHandler.WriteToken(token);
+
+                // Set authentication cookie
+                var cookieOptions = new CookieOptions
+                {
+                    HttpOnly = true,
+                    Secure = false, // Requires HTTPS
+                    SameSite = SameSiteMode.Strict,
+                    Expires = tokenDescriptor.Expires,
+                };
+
+                Response.Cookies.Append("AuthToken", response.Token, cookieOptions);
+            }
+
+            if (response.isSuccess)
+                return Ok(response);
+            else
+                return BadRequest(response);
+        }
+
+
+        [HttpPost("LoginWithHeader")]
+        public IActionResult LoginWithHeader([FromBody] CustomerLoginRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = db.LoginCustomer(request);
+
+            if (response.isSuccess)
+            {
+                var jwtSettings = _configuration.GetSection("JwtSettings");
+                var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]);
+
+                var tokenHandler = new JwtSecurityTokenHandler();
+                var tokenDescriptor = new SecurityTokenDescriptor
+                {
+                    Subject = new ClaimsIdentity(new[]
+                    {
+                        new Claim(ClaimTypes.NameIdentifier, response.CustomerId.ToString()),
+                        new Claim(ClaimTypes.Email, response.Email),
+                        new Claim(ClaimTypes.GivenName, response.FirstName),
+                        new Claim(ClaimTypes.Surname, response.LastName)
+                    }),
+                    Expires = request.RememberMe ?
+                        DateTime.UtcNow.AddDays(14) : // 2 weeks for remember me
+                        DateTime.UtcNow.AddDays(1),   // 1 day default
+                    Issuer = jwtSettings["Issuer"],
+                    Audience = jwtSettings["Audience"],
+                    SigningCredentials = new SigningCredentials(
+                        new SymmetricSecurityKey(key),
+                        SecurityAlgorithms.HmacSha256Signature)
+                };
+
+                var token = tokenHandler.CreateToken(tokenDescriptor);
+                response.Token = tokenHandler.WriteToken(token);
+
+                // Token will be sent in response body
+                // Client should store it and send in Authorization: Bearer <token> header
             }
 
             if (response.isSuccess)
@@ -111,12 +171,55 @@ namespace BaseCode.Controllers
 
         // Add [Authorize] attribute to protected endpoints
         [Authorize]
-        [HttpGet("customer-profile")]
+        [HttpPost("customer-profile")]
         public IActionResult GetCustomerProfile()
         {
-            var customerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            // Implement get customer profile logic here
-            return Ok(new { CustomerId = customerId });
+            try
+            {
+                var customerIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(customerIdClaim))
+                {
+                    return Unauthorized(new { Message = "Invalid token" });
+                }
+
+                int customerId = int.Parse(customerIdClaim);
+                var response = db.GetCustomerProfile(customerId);
+
+                if (response.isSuccess)
+                    return Ok(response);
+                else
+                    return BadRequest(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { isSuccess = false, Message = "Error retrieving profile: " + ex.Message });
+            }
+        }
+
+        [Authorize]
+        [HttpPost("update-profile")]
+        public IActionResult UpdateCustomerProfile([FromBody] UpdateCustomerRequest request)
+        {
+            try
+            {
+                var customerIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(customerIdClaim))
+                {
+                    return Unauthorized(new { Message = "Invalid token" });
+                }
+
+                int customerId = int.Parse(customerIdClaim);
+                var response = db.UpdateCustomer(customerId, request);
+
+                if (response.isSuccess)
+                    return Ok(response);
+                else
+                    return BadRequest(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { isSuccess = false, Message = "Error updating profile: " + ex.Message });
+            }
         }
     }
 }
