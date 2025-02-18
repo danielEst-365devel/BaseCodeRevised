@@ -11,6 +11,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using BaseCode.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 //TEST PUSH
 namespace BaseCode
 {
@@ -34,9 +37,13 @@ namespace BaseCode
             var db_password = Environment.GetEnvironmentVariable("DB_PASS");
 
             var conn = "Server=" + db_host + ";Port=" + db_port + ";Database=" + db_name + ";Uid=" + db_user + ";Pwd=" + db_password + ";Convert Zero Datetime=True";
+            
+            // Existing DBContext registration
             services.Add(new ServiceDescriptor(typeof(DBContext), new DBContext(conn)));
-
-
+            services.Add(new ServiceDescriptor(typeof(DBCrudAct), new DBCrudAct(conn)));
+            
+            // Add DBCrudAct registration TEST
+            // services.AddScoped<DBCrudAct>(provider => new DBCrudAct(conn));
 
             services.AddMvc().AddJsonOptions(o =>
             {
@@ -45,6 +52,30 @@ namespace BaseCode
 
             });
             services.AddHttpContextAccessor();
+
+            // Add JWT Authentication REVIEWHIN
+            var jwtSettings = Configuration.GetSection("JwtSettings");
+            var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]);
+            
+            services.AddAuthentication(x =>
+            {
+                x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+            })
+            .AddJwtBearer(x =>
+            {
+                x.RequireHttpsMetadata = false;
+                x.SaveToken = true;
+                x.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(key),
+                    ValidateIssuer = true,
+                    ValidateAudience = true,
+                    ValidIssuer = jwtSettings["Issuer"],
+                    ValidAudience = jwtSettings["Audience"]
+                };
+            });
 
         }
 
@@ -76,6 +107,7 @@ namespace BaseCode
 
             app.UseRouting();
 
+            app.UseAuthentication(); // Add this line before UseAuthorization
             app.UseAuthorization();
 
             app.UseEndpoints(endpoints =>
