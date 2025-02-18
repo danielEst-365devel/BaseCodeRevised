@@ -68,7 +68,7 @@ namespace BaseCode.Controllers
                 return BadRequest(response);
         }
 
-        [HttpPost("login")]
+        [HttpPost("Login")]
         public IActionResult Login([FromBody] CustomerLoginRequest request)
         {
             if (!ModelState.IsValid)

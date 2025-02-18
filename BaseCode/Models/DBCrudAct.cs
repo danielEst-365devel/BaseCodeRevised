@@ -66,7 +66,6 @@ namespace BaseCode.Models
                 {
                     conn.Open();
 
-                    // Check for existing email
                     MySqlCommand checkEmail = new MySqlCommand(
                         "SELECT COUNT(*) FROM CUSTOMERS WHERE EMAIL = @Email", conn);
                     checkEmail.Parameters.AddWithValue("@Email", r.Email);
@@ -85,25 +84,50 @@ namespace BaseCode.Models
                         try
                         {
                             string hashedPassword = PasswordHasher.HashPassword(r.Password);
+                            DateTime now = DateTime.Now;
 
                             MySqlCommand customerCmd = new MySqlCommand(
-                                "INSERT INTO CUSTOMERS (FIRSTNAME, LASTNAME, EMAIL, PASSWORD, PHONENUMBER, ADDRESS, CREATEDATE) " +
-                                "VALUES (@FirstName, @LastName, @Email, @Password, @PhoneNumber, @Address, @CreateDate);", conn, transaction);
+                                "INSERT INTO CUSTOMERS (FIRSTNAME, LASTNAME, EMAIL, PASSWORD, PHONENUMBER, " +
+                                "AGE, BIRTHDAY, CIVIL_STATUS, ADDRESS, CREATEDATE) " +
+                                "VALUES (@FirstName, @LastName, @Email, @Password, @PhoneNumber, " +
+                                "@Age, @Birthday, @CivilStatus, @Address, @CreateDate);",
+                                conn, transaction);
 
                             customerCmd.Parameters.AddWithValue("@FirstName", r.FirstName);
                             customerCmd.Parameters.AddWithValue("@LastName", r.LastName);
                             customerCmd.Parameters.AddWithValue("@Email", r.Email);
                             customerCmd.Parameters.AddWithValue("@Password", hashedPassword);
                             customerCmd.Parameters.AddWithValue("@PhoneNumber", r.PhoneNumber ?? (object)DBNull.Value);
-                            customerCmd.Parameters.AddWithValue("@Address", r.Address ?? (object)DBNull.Value);
-                            customerCmd.Parameters.AddWithValue("@CreateDate", DateTime.Now);
+                            customerCmd.Parameters.AddWithValue("@Age", r.Age);
+                            customerCmd.Parameters.AddWithValue("@Birthday", r.Birthday ?? (object)DBNull.Value);
+                            customerCmd.Parameters.AddWithValue("@CivilStatus", r.CivilStatus ?? (object)DBNull.Value);
+                            customerCmd.Parameters.AddWithValue("@Address", DBNull.Value);
+                            customerCmd.Parameters.AddWithValue("@CreateDate", now);
 
                             customerCmd.ExecuteNonQuery();
                             int customerId = (int)customerCmd.LastInsertedId;
 
+                            if (r.Address != null)
+                            {
+                                MySqlCommand addressCmd = new MySqlCommand(
+                                    "INSERT INTO CUSTOMER_ADDRESSES (CUSTOMERID, STREET, CITY, STATE, ZIPCODE, COUNTRY, CREATEDATE) " +
+                                    "VALUES (@CustomerId, @Street, @City, @State, @ZipCode, @Country, @CreateDate);",
+                                    conn, transaction);
+
+                                addressCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                                addressCmd.Parameters.AddWithValue("@Street", r.Address.Street);
+                                addressCmd.Parameters.AddWithValue("@City", r.Address.City);
+                                addressCmd.Parameters.AddWithValue("@State", r.Address.State);
+                                addressCmd.Parameters.AddWithValue("@ZipCode", r.Address.ZipCode);
+                                addressCmd.Parameters.AddWithValue("@Country", r.Address.Country);
+                                addressCmd.Parameters.AddWithValue("@CreateDate", now);
+
+                                addressCmd.ExecuteNonQuery();
+                            }
+
                             transaction.Commit();
                             resp.CustomerId = customerId;
-                            resp.CreateDate = DateTime.Now;
+                            resp.CreateDate = now;
                             resp.isSuccess = true;
                             resp.Message = "Customer created successfully.";
                         }
@@ -135,27 +159,60 @@ namespace BaseCode.Models
                     MySqlCommand cmd = new MySqlCommand(
                         "SELECT CUSTOMERID, EMAIL, PASSWORD, FIRSTNAME, LASTNAME " +
                         "FROM CUSTOMERS WHERE EMAIL = @Email", conn);
-
                     cmd.Parameters.AddWithValue("@Email", r.Email);
 
                     using (var reader = cmd.ExecuteReader())
                     {
                         if (reader.Read())
                         {
+                            int customerId = Convert.ToInt32(reader["CUSTOMERID"]);
+                            string email = reader["EMAIL"].ToString();
                             string storedHash = reader["PASSWORD"].ToString();
+                            string firstName = reader["FIRSTNAME"].ToString();
+                            string lastName = reader["LASTNAME"].ToString();
+
+                            // Close reader to allow new commands on same connection.
+                            reader.Close();
+
+                            // Check failed login attempts.
+                            MySqlCommand countCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM FAILED_LOGINS WHERE CUSTOMERID = @CustomerId", conn);
+                            countCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                            int failedAttempts = Convert.ToInt32(countCmd.ExecuteScalar());
+
+                            if (failedAttempts >= 5)
+                            {
+                                resp.isSuccess = false;
+                                resp.Message = "Account locked due to too many failed login attempts";
+                                conn.Close();
+                                return resp;
+                            }
+
                             bool verified = PasswordHasher.VerifyPassword(r.Password, storedHash);
 
                             if (verified)
                             {
+                                // Clear failed login attempts.
+                                MySqlCommand deleteCmd = new MySqlCommand(
+                                    "DELETE FROM FAILED_LOGINS WHERE CUSTOMERID = @CustomerId", conn);
+                                deleteCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                                deleteCmd.ExecuteNonQuery();
+
                                 resp.isSuccess = true;
-                                resp.CustomerId = Convert.ToInt32(reader["CUSTOMERID"]);
-                                resp.Email = reader["EMAIL"].ToString();
-                                resp.FirstName = reader["FIRSTNAME"].ToString();
-                                resp.LastName = reader["LASTNAME"].ToString();
+                                resp.CustomerId = customerId;
+                                resp.Email = email;
+                                resp.FirstName = firstName;
+                                resp.LastName = lastName;
                                 resp.Message = "Login successful";
                             }
                             else
                             {
+                                // Log failed login attempt.
+                                MySqlCommand insertCmd = new MySqlCommand(
+                                    "INSERT INTO FAILED_LOGINS (CUSTOMERID) VALUES (@CustomerId)", conn);
+                                insertCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                                insertCmd.ExecuteNonQuery();
+
                                 resp.isSuccess = false;
                                 resp.Message = "Invalid password";
                             }
