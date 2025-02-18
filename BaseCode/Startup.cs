@@ -1,18 +1,12 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using BaseCode.Models;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.HttpsPolicy;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using BaseCode.Models;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using System;
 using System.Text;
 //TEST PUSH
 namespace BaseCode
@@ -37,11 +31,11 @@ namespace BaseCode
             var db_password = Environment.GetEnvironmentVariable("DB_PASS");
 
             var conn = "Server=" + db_host + ";Port=" + db_port + ";Database=" + db_name + ";Uid=" + db_user + ";Pwd=" + db_password + ";Convert Zero Datetime=True";
-            
+
             // Existing DBContext registration
             services.Add(new ServiceDescriptor(typeof(DBContext), new DBContext(conn)));
             services.Add(new ServiceDescriptor(typeof(DBCrudAct), new DBCrudAct(conn)));
-            
+
             // Add DBCrudAct registration TEST
             // services.AddScoped<DBCrudAct>(provider => new DBCrudAct(conn));
 
@@ -56,7 +50,7 @@ namespace BaseCode
             // Add JWT Authentication REVIEWHIN
             var jwtSettings = Configuration.GetSection("JwtSettings");
             var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]);
-            
+
             services.AddAuthentication(x =>
             {
                 x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;

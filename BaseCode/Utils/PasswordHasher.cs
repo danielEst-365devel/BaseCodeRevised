@@ -42,10 +42,7 @@ namespace BaseCode.Utils
         private static byte[] GenerateSalt()
         {
             var salt = new byte[16];
-            using (var rng = new RNGCryptoServiceProvider())
-            {
-                rng.GetBytes(salt);
-            }
+            RandomNumberGenerator.Fill(salt);
             return salt;
         }
 

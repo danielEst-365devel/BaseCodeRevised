@@ -36,13 +36,14 @@ namespace BaseCode.Models
                 using (MySqlConnection conn = GetConnection())
                 {
                     conn.Open();
-                    MySqlTransaction myTrans;
-                    myTrans = conn.BeginTransaction();
-                    MySqlCommand cmd = new MySqlCommand(r.query, conn);
-                    cmd.ExecuteNonQuery();
+                    using (MySqlTransaction myTrans = conn.BeginTransaction())
+                    {
+                        MySqlCommand cmd = new MySqlCommand(r.query, conn, myTrans);
+                        cmd.ExecuteNonQuery();
 
-                    resp.Id = r.isInsert ? int.Parse(cmd.LastInsertedId.ToString()) : -1;
-                    myTrans.Commit();
+                        resp.Id = r.isInsert ? int.Parse(cmd.LastInsertedId.ToString()) : -1;
+                        myTrans.Commit();
+                    }
                     conn.Close();
                     resp.isSuccess = true;
                     resp.Message = r.responseMessage;
@@ -55,7 +56,7 @@ namespace BaseCode.Models
             }
             return resp;
         }
-      
+
         public CreateCustomerResponse CreateCustomer(CreateCustomerRequest r)
         {
             CreateCustomerResponse resp = new CreateCustomerResponse();
@@ -64,52 +65,55 @@ namespace BaseCode.Models
                 using (MySqlConnection conn = GetConnection())
                 {
                     conn.Open();
-                    
+
                     // Check for existing email
                     MySqlCommand checkEmail = new MySqlCommand(
                         "SELECT COUNT(*) FROM CUSTOMERS WHERE EMAIL = @Email", conn);
                     checkEmail.Parameters.AddWithValue("@Email", r.Email);
                     int emailCount = Convert.ToInt32(checkEmail.ExecuteScalar());
-                    
+
                     if (emailCount > 0)
                     {
                         resp.isSuccess = false;
                         resp.Message = "Email already exists";
+                        conn.Close();
                         return resp;
                     }
 
-                    MySqlTransaction transaction = conn.BeginTransaction();
-
-                    try
+                    using (MySqlTransaction transaction = conn.BeginTransaction())
                     {
-                        string hashedPassword = PasswordHasher.HashPassword(r.Password);
-                        
-                        MySqlCommand customerCmd = new MySqlCommand(
-                            "INSERT INTO CUSTOMERS (FIRSTNAME, LASTNAME, EMAIL, PASSWORD, PHONENUMBER, ADDRESS, CREATEDATE) " +
-                            "VALUES (@FirstName, @LastName, @Email, @Password, @PhoneNumber, @Address, @CreateDate);", conn);
+                        try
+                        {
+                            string hashedPassword = PasswordHasher.HashPassword(r.Password);
 
-                        customerCmd.Parameters.AddWithValue("@FirstName", r.FirstName);
-                        customerCmd.Parameters.AddWithValue("@LastName", r.LastName);
-                        customerCmd.Parameters.AddWithValue("@Email", r.Email);
-                        customerCmd.Parameters.AddWithValue("@Password", hashedPassword);
-                        customerCmd.Parameters.AddWithValue("@PhoneNumber", r.PhoneNumber ?? (object)DBNull.Value);
-                        customerCmd.Parameters.AddWithValue("@Address", r.Address ?? (object)DBNull.Value);
-                        customerCmd.Parameters.AddWithValue("@CreateDate", DateTime.Now);
+                            MySqlCommand customerCmd = new MySqlCommand(
+                                "INSERT INTO CUSTOMERS (FIRSTNAME, LASTNAME, EMAIL, PASSWORD, PHONENUMBER, ADDRESS, CREATEDATE) " +
+                                "VALUES (@FirstName, @LastName, @Email, @Password, @PhoneNumber, @Address, @CreateDate);", conn, transaction);
 
-                        customerCmd.ExecuteNonQuery();
-                        int customerId = (int)customerCmd.LastInsertedId;
+                            customerCmd.Parameters.AddWithValue("@FirstName", r.FirstName);
+                            customerCmd.Parameters.AddWithValue("@LastName", r.LastName);
+                            customerCmd.Parameters.AddWithValue("@Email", r.Email);
+                            customerCmd.Parameters.AddWithValue("@Password", hashedPassword);
+                            customerCmd.Parameters.AddWithValue("@PhoneNumber", r.PhoneNumber ?? (object)DBNull.Value);
+                            customerCmd.Parameters.AddWithValue("@Address", r.Address ?? (object)DBNull.Value);
+                            customerCmd.Parameters.AddWithValue("@CreateDate", DateTime.Now);
 
-                        transaction.Commit();
-                        resp.CustomerId = customerId;
-                        resp.CreateDate = DateTime.Now;
-                        resp.isSuccess = true;
-                        resp.Message = "Customer created successfully.";
+                            customerCmd.ExecuteNonQuery();
+                            int customerId = (int)customerCmd.LastInsertedId;
+
+                            transaction.Commit();
+                            resp.CustomerId = customerId;
+                            resp.CreateDate = DateTime.Now;
+                            resp.isSuccess = true;
+                            resp.Message = "Customer created successfully.";
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
                     }
-                    catch (Exception ex)
-                    {
-                        transaction.Rollback();
-                        throw ex;
-                    }
+                    conn.Close();
                 }
             }
             catch (Exception ex)
@@ -131,7 +135,7 @@ namespace BaseCode.Models
                     MySqlCommand cmd = new MySqlCommand(
                         "SELECT CUSTOMERID, EMAIL, PASSWORD, FIRSTNAME, LASTNAME " +
                         "FROM CUSTOMERS WHERE EMAIL = @Email", conn);
-                    
+
                     cmd.Parameters.AddWithValue("@Email", r.Email);
 
                     using (var reader = cmd.ExecuteReader())
@@ -162,6 +166,7 @@ namespace BaseCode.Models
                             resp.Message = "Email not found";
                         }
                     }
+                    conn.Close();
                 }
             }
             catch (Exception ex)
