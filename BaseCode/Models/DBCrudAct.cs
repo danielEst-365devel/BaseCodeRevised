@@ -727,6 +727,7 @@ namespace BaseCode.Models
                         {
                             string hashedPassword = PasswordHasher.HashPassword(request.NewPassword);
 
+                            // Update password
                             var updateCmd = new MySqlCommand(
                                 "UPDATE CUSTOMERS SET PASSWORD = @Password WHERE CUSTOMERID = @CustomerId",
                                 conn, transaction);
@@ -739,9 +740,16 @@ namespace BaseCode.Models
                                 throw new Exception("Customer not found");
                             }
 
+                            // Clear failed login attempts to remove the lockout
+                            var clearFailedLoginsCmd = new MySqlCommand(
+                                "DELETE FROM FAILED_LOGINS WHERE CUSTOMERID = @CustomerId",
+                                conn, transaction);
+                            clearFailedLoginsCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                            clearFailedLoginsCmd.ExecuteNonQuery();
+
                             transaction.Commit();
                             response.isSuccess = true;
-                            response.Message = "Password reset successfully";
+                            response.Message = "Password reset successfully and account unlocked";
                         }
                         catch (Exception)
                         {
