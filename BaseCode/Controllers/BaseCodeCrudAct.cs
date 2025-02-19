@@ -7,9 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Newtonsoft.Json.Linq;
 using System.Data;
 using System.Text;
-using BaseCode.Models.Requests;
 using BaseCode.Models.Requests.forCrudAct;
-using BaseCode.Models.Responses;
 using BaseCode.Models.Responses.forCrudAct;
 using BaseCode.Models;
 using Microsoft.IdentityModel.Tokens;
@@ -171,7 +169,7 @@ namespace BaseCode.Controllers
 
         // Add [Authorize] attribute to protected endpoints
         [Authorize]
-        [HttpPost("customer-profile")]
+        [HttpGet("customer-profile")]
         public IActionResult GetCustomerProfile()
         {
             try
@@ -197,7 +195,7 @@ namespace BaseCode.Controllers
         }
 
         [Authorize]
-        [HttpPost("update-profile")]
+        [HttpPut("update-profile")]
         public IActionResult UpdateCustomerProfile([FromBody] UpdateCustomerRequest request)
         {
             try

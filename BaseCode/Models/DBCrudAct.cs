@@ -3,9 +3,7 @@ using MySql.Data.MySqlClient;
 using System.Collections.Generic;
 using System.Linq;
 using System.Data;
-using BaseCode.Models.Responses;
 using BaseCode.Models.Responses.forCrudAct;
-using BaseCode.Models.Requests;
 using BaseCode.Models.Requests.forCrudAct;
 using BaseCode.Models.Tables;
 using System.Reflection;
@@ -27,36 +25,7 @@ namespace BaseCode.Models
         {
             return new MySqlConnection(ConnectionString);
         }
-
-        public GenericInsertUpdateResponse InsertUpdateData(GenericInsertUpdateRequest r)
-        {
-            GenericInsertUpdateResponse resp = new GenericInsertUpdateResponse();
-            try
-            {
-                using (MySqlConnection conn = GetConnection())
-                {
-                    conn.Open();
-                    using (MySqlTransaction myTrans = conn.BeginTransaction())
-                    {
-                        MySqlCommand cmd = new MySqlCommand(r.query, conn, myTrans);
-                        cmd.ExecuteNonQuery();
-
-                        resp.Id = r.isInsert ? int.Parse(cmd.LastInsertedId.ToString()) : -1;
-                        myTrans.Commit();
-                    }
-                    conn.Close();
-                    resp.isSuccess = true;
-                    resp.Message = r.responseMessage;
-                }
-            }
-            catch (Exception ex)
-            {
-                resp.isSuccess = false;
-                resp.Message = r.errorMessage + ": " + ex.Message;
-            }
-            return resp;
-        }
-
+      
         public CreateCustomerResponse CreateCustomer(CreateCustomerRequest r)
         {
             CreateCustomerResponse resp = new CreateCustomerResponse();
