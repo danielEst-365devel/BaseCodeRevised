@@ -8,7 +8,10 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Text;
-//TEST PUSH
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Jose;
+
 namespace BaseCode
 {
     public class Startup
@@ -71,6 +74,10 @@ namespace BaseCode
                 };
             });
 
+            // Add password reset JWT configuration
+            services.Configure<JwtSettings>(jwtSettings);
+            var resetKey = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]);
+            Environment.SetEnvironmentVariable("JWT_SECRET_KEY", jwtSettings["SecretKey"]);
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.

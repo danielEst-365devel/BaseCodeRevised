@@ -233,5 +233,31 @@ namespace BaseCode.Controllers
             else
                 return BadRequest(response);
         }
+
+        [HttpPost("confirm-otp")]
+        public IActionResult ConfirmOtp([FromBody] ConfirmOtpRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = db.ConfirmOtp(request); // Use the instance 'db' instead of 'DBCrudAct'
+            return Ok(response);
+        }
+
+
+        [HttpPost("reset-password")]
+        public IActionResult ResetPassword([FromHeader(Name = "Authorization")] string authorization, [FromBody] ResetPasswordRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            if (string.IsNullOrEmpty(authorization) || !authorization.StartsWith("Bearer "))
+                return Unauthorized(new { message = "Invalid token" });
+
+            string token = authorization.Substring("Bearer ".Length).Trim();
+            var response = db.ResetPassword(token, request); // Use the instance 'db' instead of 'DBCrudAct'
+            return Ok(response);
+        }
+
     }
 }

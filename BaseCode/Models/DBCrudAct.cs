@@ -8,6 +8,10 @@ using BaseCode.Models.Requests.forCrudAct;
 using BaseCode.Models.Tables;
 using System.Reflection;
 using BaseCode.Utils;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 namespace BaseCode.Models
 {
@@ -594,6 +598,165 @@ namespace BaseCode.Models
             var random = new Random();
             return new string(Enumerable.Repeat(chars, 8)
                 .Select(s => s[random.Next(s.Length)]).ToArray());
+        }
+
+        // Add these methods to the DBCrudAct class
+
+        public ConfirmOtpResponse ConfirmOtp(ConfirmOtpRequest request)
+        {
+            var response = new ConfirmOtpResponse();
+            try
+            {
+                using (var conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            // Get customer ID and verify OTP
+                            var checkCmd = new MySqlCommand(@"
+                                SELECT c.CUSTOMERID, c.EMAIL, o.OTP_ID 
+                                FROM CUSTOMERS c
+                                JOIN CUSTOMERS_OTP_CRUD o ON c.CUSTOMERID = o.CUSTOMERID
+                                WHERE c.EMAIL = @Email 
+                                AND o.OTP = @Otp
+                                AND o.STATUS = 'A'
+                                AND TIMESTAMPDIFF(MINUTE, o.CREATED_AT, NOW()) < 1",
+                                conn, transaction);
+
+                            checkCmd.Parameters.AddWithValue("@Email", request.Email);
+                            checkCmd.Parameters.AddWithValue("@Otp", request.Otp);
+
+                            using (var reader = checkCmd.ExecuteReader())
+                            {
+                                if (!reader.Read())
+                                {
+                                    response.isSuccess = false;
+                                    response.Message = "Invalid or expired OTP";
+                                    return response;
+                                }
+
+                                int customerId = reader.GetInt32("CUSTOMERID");
+                                int otpId = reader.GetInt32("OTP_ID");
+                                string email = reader.GetString("EMAIL");
+                                reader.Close();
+
+                                // Mark OTP as used
+                                var updateCmd = new MySqlCommand(
+                                    "UPDATE CUSTOMERS_OTP_CRUD SET STATUS = 'U' WHERE OTP_ID = @OtpId",
+                                    conn, transaction);
+                                updateCmd.Parameters.AddWithValue("@OtpId", otpId);
+                                updateCmd.ExecuteNonQuery();
+
+                                // Generate JWT token
+                                var tokenHandler = new JwtSecurityTokenHandler();
+                                var key = Encoding.ASCII.GetBytes(Environment.GetEnvironmentVariable("JWT_SECRET_KEY"));
+                                var tokenDescriptor = new SecurityTokenDescriptor
+                                {
+                                    Subject = new ClaimsIdentity(new[]
+                                    {
+                                        new Claim(ClaimTypes.NameIdentifier, customerId.ToString()),
+                                        new Claim(ClaimTypes.Email, email),
+                                        new Claim("purpose", "password_reset")
+                                    }),
+                                    Expires = DateTime.UtcNow.AddMinutes(15),
+                                    SigningCredentials = new SigningCredentials(
+                                        new SymmetricSecurityKey(key),
+                                        SecurityAlgorithms.HmacSha256Signature)
+                                };
+
+                                var token = tokenHandler.CreateToken(tokenDescriptor);
+                                response.Token = tokenHandler.WriteToken(token);
+
+                                transaction.Commit();
+                                response.isSuccess = true;
+                                response.Message = "OTP confirmed successfully";
+                            }
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"OTP confirmation failed: {ex.Message}";
+            }
+            return response;
+        }
+
+        public ResetPasswordResponse ResetPassword(string token, ResetPasswordRequest request)
+        {
+            var response = new ResetPasswordResponse();
+            try
+            {
+                var tokenHandler = new JwtSecurityTokenHandler();
+                var key = Encoding.ASCII.GetBytes(Environment.GetEnvironmentVariable("JWT_SECRET_KEY"));
+                
+                var tokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = new SymmetricSecurityKey(key),
+                    ValidateIssuer = false,
+                    ValidateAudience = false,
+                    ClockSkew = TimeSpan.Zero
+                };
+
+                SecurityToken validatedToken;
+                var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out validatedToken);
+
+                var customerId = int.Parse(principal.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+                var purpose = principal.FindFirst("purpose")?.Value;
+
+                if (purpose != "password_reset")
+                {
+                    throw new Exception("Invalid token purpose");
+                }
+
+                using (var conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            string hashedPassword = PasswordHasher.HashPassword(request.NewPassword);
+
+                            var updateCmd = new MySqlCommand(
+                                "UPDATE CUSTOMERS SET PASSWORD = @Password WHERE CUSTOMERID = @CustomerId",
+                                conn, transaction);
+                            updateCmd.Parameters.AddWithValue("@Password", hashedPassword);
+                            updateCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                            
+                            int rowsAffected = updateCmd.ExecuteNonQuery();
+                            if (rowsAffected == 0)
+                            {
+                                throw new Exception("Customer not found");
+                            }
+
+                            transaction.Commit();
+                            response.isSuccess = true;
+                            response.Message = "Password reset successfully";
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Password reset failed: {ex.Message}";
+            }
+            return response;
         }
     }
 }
