@@ -7,9 +7,6 @@ using BaseCode.Models.Responses.forCrudAct;
 using BaseCode.Models.Requests.forCrudAct;
 using BaseCode.Models.Tables;
 using System.Reflection;
-using Twilio;
-using Twilio.Rest.Api.V2010.Account;
-using Twilio.Types;
 using BaseCode.Utils;
 
 namespace BaseCode.Models
@@ -564,18 +561,8 @@ namespace BaseCode.Models
                                 insertCmd.ExecuteNonQuery();
 
                                 // Send OTP via Twilio
-                                var accountSid = Environment.GetEnvironmentVariable("TWILIO_ACCOUNT_SID");
-                                var authToken = Environment.GetEnvironmentVariable("TWILIO_AUTH_TOKEN");
-
-                                TwilioClient.Init(accountSid, authToken);
-                                var messageOptions = new CreateMessageOptions(new PhoneNumber(phoneNumber))
-                                {
-                                    From = new PhoneNumber("+12769001832"),
-                                    Body = $"Your password reset OTP is: {otp}"
-                                };
-                                var message = MessageResource.Create(messageOptions);
-
-                                if (string.IsNullOrEmpty(message.Sid))
+                                bool smsSent = TwilioService.SendSms(phoneNumber, $"Your password reset OTP is: {otp}");
+                                if (!smsSent)
                                 {
                                     throw new Exception("Failed to send SMS");
                                 }
