@@ -219,5 +219,19 @@ namespace BaseCode.Controllers
                 return BadRequest(new { isSuccess = false, Message = "Error updating profile: " + ex.Message });
             }
         }
+
+        [HttpPost("forget-password")]
+        public IActionResult ForgetPassword([FromBody] ForgetPasswordRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = db.RequestPasswordReset(request);
+            
+            if (response.isSuccess)
+                return Ok(response);
+            else
+                return BadRequest(response);
+        }
     }
 }

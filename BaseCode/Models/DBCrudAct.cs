@@ -484,6 +484,130 @@ namespace BaseCode.Models
             return response;
         }
 
+        // Add this method to the DBCrudAct class
+        public ForgetPasswordResponse RequestPasswordReset(ForgetPasswordRequest request)
+        {
+            var response = new ForgetPasswordResponse();
+            try
+            {
+                using (var conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            // Check if email exists and get customer details
+                            var checkCmd = new MySqlCommand(
+                                "SELECT CUSTOMERID, PHONENUMBER, ACCOUNT_STATUS FROM CUSTOMERS WHERE EMAIL = @Email",
+                                conn, transaction);
+                            checkCmd.Parameters.AddWithValue("@Email", request.Email);
+
+                            using (var reader = checkCmd.ExecuteReader())
+                            {
+                                if (!reader.Read())
+                                {
+                                    response.isSuccess = false;
+                                    response.Message = "Email not found";
+                                    return response;
+                                }
+
+                                int customerId = reader.GetInt32("CUSTOMERID");
+                                string phoneNumber = reader.GetString("PHONENUMBER");
+                                string accountStatus = reader.GetString("ACCOUNT_STATUS");
+
+                                if (accountStatus != "A")
+                                {
+                                    response.isSuccess = false;
+                                    response.Message = "Account is inactive";
+                                    return response;
+                                }
+
+                                if (string.IsNullOrEmpty(phoneNumber))
+                                {
+                                    response.isSuccess = false;
+                                    response.Message = "No phone number associated with this account";
+                                    return response;
+                                }
+
+                                reader.Close();
+
+                                // First, expire OTPs that are older than 1 minute
+                                var expireOldOtpsCmd = new MySqlCommand(@"
+                                    UPDATE CUSTOMERS_OTP_CRUD 
+                                    SET STATUS = 'E' 
+                                    WHERE CUSTOMERID = @CustomerId 
+                                    AND STATUS = 'A'
+                                    AND TIMESTAMPDIFF(MINUTE, CREATED_AT, NOW()) >= 1",
+                                    conn, transaction);
+                                expireOldOtpsCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                                expireOldOtpsCmd.ExecuteNonQuery();
+
+                                // Generate OTP
+                                string otp = GenerateOtp();
+                                DateTime now = DateTime.Now;
+
+                                // Expire any remaining active OTPs
+                                var expireCmd = new MySqlCommand(
+                                    "UPDATE CUSTOMERS_OTP_CRUD SET STATUS = 'E' WHERE CUSTOMERID = @CustomerId AND STATUS = 'A'",
+                                    conn, transaction);
+                                expireCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                                expireCmd.ExecuteNonQuery();
+
+                                // Insert new OTP
+                                var insertCmd = new MySqlCommand(
+                                    "INSERT INTO CUSTOMERS_OTP_CRUD (CUSTOMERID, OTP, STATUS, CREATED_AT) VALUES (@CustomerId, @Otp, 'A', @CreatedAt)",
+                                    conn, transaction);
+                                insertCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                                insertCmd.Parameters.AddWithValue("@Otp", otp);
+                                insertCmd.Parameters.AddWithValue("@CreatedAt", now);
+                                insertCmd.ExecuteNonQuery();
+
+                                // Send OTP via Twilio
+                                var accountSid = Environment.GetEnvironmentVariable("TWILIO_ACCOUNT_SID");
+                                var authToken = Environment.GetEnvironmentVariable("TWILIO_AUTH_TOKEN");
+
+                                TwilioClient.Init(accountSid, authToken);
+                                var messageOptions = new CreateMessageOptions(new PhoneNumber(phoneNumber))
+                                {
+                                    From = new PhoneNumber("+12769001832"),
+                                    Body = $"Your password reset OTP is: {otp}"
+                                };
+                                var message = MessageResource.Create(messageOptions);
+
+                                if (string.IsNullOrEmpty(message.Sid))
+                                {
+                                    throw new Exception("Failed to send SMS");
+                                }
+
+                                transaction.Commit();
+                                response.isSuccess = true;
+                                response.Message = "OTP sent successfully";
+                            }
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Password reset request failed: {ex.Message}";
+            }
+            return response;
+        }
+
+        private string GenerateOtp()
+        {
+            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            var random = new Random();
+            return new string(Enumerable.Repeat(chars, 8)
+                .Select(s => s[random.Next(s.Length)]).ToArray());
+        }
     }
 }
 
