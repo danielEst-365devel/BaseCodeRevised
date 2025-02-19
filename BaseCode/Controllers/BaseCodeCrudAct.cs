@@ -259,5 +259,27 @@ namespace BaseCode.Controllers
             return Ok(response);
         }
 
+        [HttpGet("active-customers")]
+        public IActionResult GetActiveCustomers()
+        {
+            var response = db.GetActiveCustomers();
+            if (response.isSuccess)
+                return Ok(response);
+            else
+                return BadRequest(response);
+        }
+
+        [HttpPost("UpdateCustomerById")]
+        public IActionResult UpdateCustomerById([FromBody] UpdateCustomerByIdRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = db.UpdateCustomerById(request);
+            if (response.isSuccess)
+                return Ok(response);
+            else
+                return BadRequest(response);
+        }
     }
 }
