@@ -281,5 +281,25 @@ namespace BaseCode.Controllers
             else
                 return BadRequest(response);
         }
+
+        [HttpPost("DeleteUser")]
+        public IActionResult DeleteUser([FromBody] DeleteUserRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                var response = db.DeleteUser(request);
+                if (response.isSuccess)
+                    return Ok(response);
+                else
+                    return BadRequest(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { isSuccess = false, Message = "Error deleting user: " + ex.Message });
+            }
+        }
     }
 }

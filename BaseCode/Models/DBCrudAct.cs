@@ -975,6 +975,73 @@ namespace BaseCode.Models
 
             return response;
         }
+
+        // Add this method to the DBCrudAct class
+        public DeleteUserResponse DeleteUser(DeleteUserRequest request)
+        {
+            var response = new DeleteUserResponse();
+            try
+            {
+                if (!int.TryParse(request.CustomerId, out int customerId))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Invalid Customer ID format.";
+                    return response;
+                }
+
+                using (var conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            // Check if customer exists
+                            var checkCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM CUSTOMERS WHERE CUSTOMERID = @CustomerId",
+                                conn, transaction);
+                            checkCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                            int exists = Convert.ToInt32(checkCmd.ExecuteScalar());
+
+                            if (exists == 0)
+                            {
+                                response.isSuccess = false;
+                                response.Message = "Customer not found or already inactive.";
+                                return response;
+                            }
+
+                            // Update account status to 'I'
+                            DateTime now = DateTime.Now;
+                            var updateCmd = new MySqlCommand(
+                                "UPDATE CUSTOMERS SET ACCOUNT_STATUS = 'I', UPDATEDATE = @UpdateDate " +
+                                "WHERE CUSTOMERID = @CustomerId",
+                                conn, transaction);
+                            updateCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                            updateCmd.Parameters.AddWithValue("@UpdateDate", now);
+
+                            updateCmd.ExecuteNonQuery();
+
+                            transaction.Commit();
+                            response.CustomerId = customerId;
+                            response.UpdateDate = now;
+                            response.isSuccess = true;
+                            response.Message = "User deleted successfully.";
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error deleting user: {ex.Message}";
+            }
+            return response;
+        }
     }
 }
 
