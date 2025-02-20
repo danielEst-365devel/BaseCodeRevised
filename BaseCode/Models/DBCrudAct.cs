@@ -26,25 +26,18 @@ namespace BaseCode.Models
         {
             return new MySqlConnection(ConnectionString);
         }
-      
-        public CreateCustomerResponse CreateCustomer(CreateCustomerRequest r)
+
+        public CreateUserResponse CreateCustomer(CreateUserRequest r)
         {
-            CreateCustomerResponse resp = new CreateCustomerResponse();
+            CreateUserResponse resp = new CreateUserResponse();
             try
             {
-                if (r.Age < 12)
-                {
-                    resp.isSuccess = false;
-                    resp.Message = "Age must be at least 12.";
-                    return resp;
-                }
-
                 using (MySqlConnection conn = GetConnection())
                 {
                     conn.Open();
 
                     MySqlCommand checkEmail = new MySqlCommand(
-                        "SELECT COUNT(*) FROM CUSTOMERS WHERE EMAIL = @Email", conn);
+                        "SELECT COUNT(*) FROM USERS WHERE EMAIL = @Email", conn);
                     checkEmail.Parameters.AddWithValue("@Email", r.Email);
                     int emailCount = Convert.ToInt32(checkEmail.ExecuteScalar());
 
@@ -56,6 +49,19 @@ namespace BaseCode.Models
                         return resp;
                     }
 
+                    MySqlCommand checkUserName = new MySqlCommand(
+                        "SELECT COUNT(*) FROM USERS WHERE USER_NAME = @UserName", conn);
+                    checkUserName.Parameters.AddWithValue("@UserName", r.UserName);
+                    int userNameCount = Convert.ToInt32(checkUserName.ExecuteScalar());
+
+                    if (userNameCount > 0)
+                    {
+                        resp.isSuccess = false;
+                        resp.Message = "UserName already exists";
+                        conn.Close();
+                        return resp;
+                    }
+
                     using (MySqlTransaction transaction = conn.BeginTransaction())
                     {
                         try
@@ -63,35 +69,32 @@ namespace BaseCode.Models
                             string hashedPassword = PasswordHasher.HashPassword(r.Password);
                             DateTime now = DateTime.Now;
 
-                            MySqlCommand customerCmd = new MySqlCommand(
-                                "INSERT INTO CUSTOMERS (FIRSTNAME, LASTNAME, EMAIL, PASSWORD, PHONENUMBER, " +
-                                "AGE, BIRTHDAY, CIVIL_STATUS, ADDRESS, CREATEDATE) " +
-                                "VALUES (@FirstName, @LastName, @Email, @Password, @PhoneNumber, " +
-                                "@Age, @Birthday, @CivilStatus, @Address, @CreateDate);",
+                            MySqlCommand userCmd = new MySqlCommand(
+                                "INSERT INTO USERS (USER_NAME, FIRST_NAME, LAST_NAME, EMAIL, PASSWORD, PHONE_NUMBER, BIRTHDAY, CIVIL_STATUS, CREATEDATE) " +
+                                "VALUES (@UserName, @FirstName, @LastName, @Email, @Password, @PhoneNumber, @Birthday, @CivilStatus, @CreateDate);",
                                 conn, transaction);
 
-                            customerCmd.Parameters.AddWithValue("@FirstName", r.FirstName);
-                            customerCmd.Parameters.AddWithValue("@LastName", r.LastName);
-                            customerCmd.Parameters.AddWithValue("@Email", r.Email);
-                            customerCmd.Parameters.AddWithValue("@Password", hashedPassword);
-                            customerCmd.Parameters.AddWithValue("@PhoneNumber", r.PhoneNumber ?? (object)DBNull.Value);
-                            customerCmd.Parameters.AddWithValue("@Age", r.Age);
-                            customerCmd.Parameters.AddWithValue("@Birthday", r.Birthday ?? (object)DBNull.Value);
-                            customerCmd.Parameters.AddWithValue("@CivilStatus", r.CivilStatus ?? (object)DBNull.Value);
-                            customerCmd.Parameters.AddWithValue("@Address", DBNull.Value);
-                            customerCmd.Parameters.AddWithValue("@CreateDate", now);
+                            userCmd.Parameters.AddWithValue("@UserName", r.UserName);
+                            userCmd.Parameters.AddWithValue("@FirstName", r.FirstName);
+                            userCmd.Parameters.AddWithValue("@LastName", r.LastName);
+                            userCmd.Parameters.AddWithValue("@Email", r.Email);
+                            userCmd.Parameters.AddWithValue("@Password", hashedPassword);
+                            userCmd.Parameters.AddWithValue("@PhoneNumber", r.PhoneNumber);
+                            userCmd.Parameters.AddWithValue("@Birthday", r.Birthday);
+                            userCmd.Parameters.AddWithValue("@CivilStatus", r.CivilStatus.ToUpper());
+                            userCmd.Parameters.AddWithValue("@CreateDate", now);
 
-                            customerCmd.ExecuteNonQuery();
-                            int customerId = (int)customerCmd.LastInsertedId;
+                            userCmd.ExecuteNonQuery();
+                            int UserId = (int)userCmd.LastInsertedId;
 
                             if (r.Address != null)
                             {
                                 MySqlCommand addressCmd = new MySqlCommand(
-                                    "INSERT INTO CUSTOMER_ADDRESSES (CUSTOMERID, STREET, CITY, STATE, ZIPCODE, COUNTRY, CREATEDATE) " +
-                                    "VALUES (@CustomerId, @Street, @City, @State, @ZipCode, @Country, @CreateDate);",
+                                    "INSERT INTO USER_ADDRESSES (USER_ID, STREET, CITY, STATE, ZIPCODE, COUNTRY, CREATEDATE) " +
+                                    "VALUES (@UserId, @Street, @City, @State, @ZipCode, @Country, @CreateDate);",
                                     conn, transaction);
 
-                                addressCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                                addressCmd.Parameters.AddWithValue("@UserId", UserId);
                                 addressCmd.Parameters.AddWithValue("@Street", r.Address.Street);
                                 addressCmd.Parameters.AddWithValue("@City", r.Address.City);
                                 addressCmd.Parameters.AddWithValue("@State", r.Address.State);
@@ -103,10 +106,10 @@ namespace BaseCode.Models
                             }
 
                             transaction.Commit();
-                            resp.CustomerId = customerId;
+                            resp.UserId = UserId; // You may later refactor this to UserId if needed
                             resp.CreateDate = now;
                             resp.isSuccess = true;
-                            resp.Message = "Customer created successfully.";
+                            resp.Message = "User created successfully.";
                         }
                         catch (Exception)
                         {
@@ -120,10 +123,233 @@ namespace BaseCode.Models
             catch (Exception ex)
             {
                 resp.isSuccess = false;
-                resp.Message = "Customer creation failed: " + ex.Message;
+                resp.Message = "User creation failed: " + ex.Message;
             }
             return resp;
         }
+
+        public GetActiveUsersResponse GetActiveUsers()
+        {
+            var response = new GetActiveUsersResponse
+            {
+                Users = new List<ActiveUsers>()
+            };
+
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+
+                    string sql = @"
+                        SELECT 
+                            c.USER_NAME, c.USER_ID, c.FIRST_NAME, c.LAST_NAME, c.EMAIL, c.PHONE_NUMBER,
+                            c.AGE, c.BIRTHDAY, c.CIVIL_STATUS, c.CREATEDATE,
+                            ca.STREET, ca.CITY, ca.STATE, ca.ZIPCODE, ca.COUNTRY
+                        FROM USERS c
+                        LEFT JOIN USER_ADDRESSES ca ON c.USER_ID = ca.USER_ID
+                        WHERE c.ACCOUNT_STATUS = 'A'
+                        ORDER BY c.USER_ID";
+
+                    using (MySqlCommand cmd = new MySqlCommand(sql, conn))
+                    {
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var user = new ActiveUsers
+                                {
+                                    UserName = reader.GetString("USER_NAME"),
+                                    UserId = reader.GetInt32("USER_ID"),
+                                    FirstName = reader.GetString("FIRST_NAME"),
+                                    LastName = reader.GetString("LAST_NAME"),
+                                    Email = reader.GetString("EMAIL"),
+                                    PhoneNumber = reader.IsDBNull("PHONE_NUMBER") ? null : reader.GetString("PHONE_NUMBER"),
+                                    Age = reader.GetInt32("AGE"),
+                                    Birthday = reader.GetDateTime("BIRTHDAY"),
+                                    CivilStatus = reader.GetString("CIVIL_STATUS"),
+                                    CreateDate = reader.GetDateTime("CREATEDATE"),
+                                    Address = !reader.IsDBNull("STREET") ? new UserAddress
+                                    {
+                                        Street = reader.GetString("STREET"),
+                                        City = reader.GetString("CITY"),
+                                        State = reader.GetString("STATE"),
+                                        ZipCode = reader.GetString("ZIPCODE"),
+                                        Country = reader.GetString("COUNTRY")
+                                    } : null
+                                };
+                                response.Users.Add(user);
+                            }
+                        }
+                    }
+                }
+
+                response.isSuccess = true;
+                response.Message = "Active users retrieved successfully.";
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = "Error retrieving active users: " + ex.Message;
+            }
+
+            return response;
+        }
+
+
+        // Update the UpdateCustomerById method
+        public UpdateUserResponse UpdateUserById(UpdateUserByIdRequest r)
+        {
+            var response = new UpdateUserResponse();
+            try
+            {
+                if (!int.TryParse(r.UserId, out int userId))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Invalid User ID format.";
+                    return response;
+                }
+
+                using (var conn = GetConnection())
+                {
+                    conn.Open();
+
+                    // Check if user exists
+                    using (var checkCmd = new MySqlCommand(
+                        "SELECT COUNT(*) FROM USERS WHERE USER_ID = @UserId", conn))
+                    {
+                        checkCmd.Parameters.AddWithValue("@UserId", userId);
+                        int exists = Convert.ToInt32(checkCmd.ExecuteScalar());
+                        if (exists == 0)
+                        {
+                            response.isSuccess = false;
+                            response.Message = "User not found.";
+                            return response;
+                        }
+                    }
+
+                    // Check if email is already used by another user
+                    using (var emailCmd = new MySqlCommand(
+                        "SELECT COUNT(*) FROM USERS WHERE EMAIL = @Email AND USER_ID != @UserId", conn))
+                    {
+                        emailCmd.Parameters.AddWithValue("@Email", r.Email);
+                        emailCmd.Parameters.AddWithValue("@UserId", userId);
+                        int emailExists = Convert.ToInt32(emailCmd.ExecuteScalar());
+                        if (emailExists > 0)
+                        {
+                            response.isSuccess = false;
+                            response.Message = "Email already exists for another user.";
+                            return response;
+                        }
+                    }
+
+                    // Check if username is already used by another user
+                    using (var usernameCmd = new MySqlCommand(
+                        "SELECT COUNT(*) FROM USERS WHERE USER_NAME = @UserName AND USER_ID != @UserId", conn))
+                    {
+                        usernameCmd.Parameters.AddWithValue("@UserName", r.UserName);
+                        usernameCmd.Parameters.AddWithValue("@UserId", userId);
+                        int usernameExists = Convert.ToInt32(usernameCmd.ExecuteScalar());
+                        if (usernameExists > 0)
+                        {
+                            response.isSuccess = false;
+                            response.Message = "Username already exists for another user.";
+                            return response;
+                        }
+                    }
+
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            DateTime now = DateTime.Now;
+
+                            // Update user details including account status and username
+                            string updateUserQuery = @"
+                        UPDATE USERS 
+                        SET USER_NAME = @UserName,
+                            FIRST_NAME = @FirstName,
+                            LAST_NAME = @LastName,
+                            EMAIL = @Email,
+                            PHONE_NUMBER = @PhoneNumber,
+                            BIRTHDAY = @Birthday,
+                            CIVIL_STATUS = @CivilStatus,
+                            ACCOUNT_STATUS = @AccountStatus,
+                            UPDATEDATE = @UpdateDate
+                        WHERE USER_ID = @UserId";
+
+                            using (var cmd = new MySqlCommand(updateUserQuery, conn, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@UserId", userId);
+                                cmd.Parameters.AddWithValue("@UserName", r.UserName);
+                                cmd.Parameters.AddWithValue("@FirstName", r.FirstName);
+                                cmd.Parameters.AddWithValue("@LastName", r.LastName);
+                                cmd.Parameters.AddWithValue("@Email", r.Email);
+                                cmd.Parameters.AddWithValue("@PhoneNumber", r.PhoneNumber); // nullable in schema
+                                cmd.Parameters.AddWithValue("@Birthday", r.Birthday);
+                                cmd.Parameters.AddWithValue("@CivilStatus", r.CivilStatus.ToUpper()); // Ensure ENUM compatibility
+                                cmd.Parameters.AddWithValue("@AccountStatus", r.AccountStatus.ToUpper()); // Ensure ENUM compatibility
+                                cmd.Parameters.AddWithValue("@UpdateDate", now);
+
+                                cmd.ExecuteNonQuery();
+                            }
+
+                            // Handle address update (assuming one address per user)
+                            if (r.Address != null)
+                            {
+                                // First, check if an address exists for this user
+                                string upsertAddressQuery = @"
+                            INSERT INTO USER_ADDRESSES 
+                                (USER_ID, STREET, CITY, STATE, ZIPCODE, COUNTRY, CREATEDATE)
+                            VALUES 
+                                (@UserId, @Street, @City, @State, @ZipCode, @Country, @CreateDate)
+                            ON DUPLICATE KEY UPDATE
+                                STREET = @Street,
+                                CITY = @City,
+                                STATE = @State,
+                                ZIPCODE = @ZipCode,
+                                COUNTRY = @Country,
+                                UPDATEDATE = @CreateDate";
+
+                                // Note: This requires a UNIQUE KEY on USER_ID in USER_ADDRESSES (see schema change below)
+                                using (var addrCmd = new MySqlCommand(upsertAddressQuery, conn, transaction))
+                                {
+                                    addrCmd.Parameters.AddWithValue("@UserId", userId);
+                                    addrCmd.Parameters.AddWithValue("@Street", r.Address.Street);
+                                    addrCmd.Parameters.AddWithValue("@City", r.Address.City);
+                                    addrCmd.Parameters.AddWithValue("@State", r.Address.State);
+                                    addrCmd.Parameters.AddWithValue("@ZipCode", r.Address.ZipCode);
+                                    addrCmd.Parameters.AddWithValue("@Country", r.Address.Country);
+                                    addrCmd.Parameters.AddWithValue("@CreateDate", now);
+
+                                    addrCmd.ExecuteNonQuery();
+                                }
+                            }
+
+                            transaction.Commit();
+                            response.UserId = userId;
+                            response.UpdateDate = now;
+                            response.isSuccess = true;
+                            response.Message = "User updated successfully.";
+                        }
+                        catch (Exception ex)
+                        {
+                            transaction.Rollback();
+                            response.isSuccess = false;
+                            response.Message = $"Error during update: {ex.Message}";
+                            return response;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error updating user: {ex.Message}";
+            }
+            return response;
+        }
+
 
         public CustomerLoginResponse LoginCustomer(CustomerLoginRequest r)
         {
@@ -134,19 +360,19 @@ namespace BaseCode.Models
                 {
                     conn.Open();
                     MySqlCommand cmd = new MySqlCommand(
-                        "SELECT CUSTOMERID, EMAIL, PASSWORD, FIRSTNAME, LASTNAME, ACCOUNT_STATUS " +
-                        "FROM CUSTOMERS WHERE EMAIL = @Email", conn);
+                        "SELECT USER_ID, EMAIL, PASSWORD, FIRST_NAME, LAST_NAME, ACCOUNT_STATUS " +
+                        "FROM USERS WHERE EMAIL = @Email", conn);
                     cmd.Parameters.AddWithValue("@Email", r.Email);
 
                     using (var reader = cmd.ExecuteReader())
                     {
                         if (reader.Read())
                         {
-                            int customerId = Convert.ToInt32(reader["CUSTOMERID"]);
+                            int customerId = Convert.ToInt32(reader["USER_ID"]);
                             string email = reader["EMAIL"].ToString();
                             string storedHash = reader["PASSWORD"].ToString();
-                            string firstName = reader["FIRSTNAME"].ToString();
-                            string lastName = reader["LASTNAME"].ToString();
+                            string firstName = reader["FIRST_NAME"].ToString();
+                            string lastName = reader["LAST_NAME"].ToString();
                             string accountStatus = reader["ACCOUNT_STATUS"].ToString();
 
                             reader.Close();
@@ -160,8 +386,8 @@ namespace BaseCode.Models
                             }
                                                        
                             MySqlCommand countCmd = new MySqlCommand(
-                            "SELECT COUNT(*) FROM FAILED_LOGINS WHERE CUSTOMERID = @CustomerId", conn);
-                            countCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                            "SELECT COUNT(*) FROM FAILED_LOGINS WHERE USER_ID = @UserId", conn);
+                            countCmd.Parameters.AddWithValue("@UserId", customerId);
                             int failedAttempts = Convert.ToInt32(countCmd.ExecuteScalar());
 
                             if (failedAttempts >= 5)
@@ -178,8 +404,8 @@ namespace BaseCode.Models
                             {
                                
                                 MySqlCommand deleteCmd = new MySqlCommand(
-                                "DELETE FROM FAILED_LOGINS WHERE CUSTOMERID = @CustomerId", conn);
-                                deleteCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                                "DELETE FROM FAILED_LOGINS WHERE USER_ID = @UserId", conn);
+                                deleteCmd.Parameters.AddWithValue("@UserId", customerId);
                                 deleteCmd.ExecuteNonQuery();
 
                                 resp.isSuccess = true;
@@ -192,8 +418,8 @@ namespace BaseCode.Models
                             else
                             {
                                 MySqlCommand insertCmd = new MySqlCommand(
-                                "INSERT INTO FAILED_LOGINS (CUSTOMERID) VALUES (@CustomerId)", conn);
-                                insertCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                                "INSERT INTO FAILED_LOGINS (USER_ID) VALUES (@UserId)", conn);
+                                insertCmd.Parameters.AddWithValue("@UserId", customerId);
                                 insertCmd.ExecuteNonQuery();
 
                                 resp.isSuccess = false;
@@ -310,16 +536,16 @@ namespace BaseCode.Models
         }
 
        
-        public CustomerProfileResponse GetCustomerProfile(int customerId)
+        public UserProfileResponse GetCustomerProfile(int userId)
         {
             using (var conn = GetConnection())
             {
                 conn.Open();
-                var response = new CustomerProfileResponse();
+                var response = new UserProfileResponse();
 
                 try
                 {
-                                       string customerQuery = @"SELECT 
+                    string customerQuery = @"SELECT 
                     c.CUSTOMERID, c.FIRSTNAME, c.LASTNAME, c.EMAIL, 
                     c.PHONENUMBER, c.AGE, c.BIRTHDAY, c.CIVIL_STATUS, 
                     c.CREATEDATE,
@@ -330,7 +556,7 @@ namespace BaseCode.Models
 
                     using (var cmd = new MySqlCommand(customerQuery, conn))
                     {
-                        cmd.Parameters.AddWithValue("@CustomerId", customerId);
+                        cmd.Parameters.AddWithValue("@CustomerId", userId);
 
                         using (var reader = cmd.ExecuteReader())
                         {
@@ -351,7 +577,7 @@ namespace BaseCode.Models
                                 // Map address if exists
                                 if (!reader.IsDBNull(reader.GetOrdinal("STREET")))
                                 {
-                                    response.Address = new CustomerAddress
+                                    response.Address = new UserAddress
                                     {
                                         Street = reader.GetString("STREET"),
                                         City = reader.GetString("CITY"),
@@ -381,18 +607,11 @@ namespace BaseCode.Models
         }
 
         // Add this new method to the DBCrudAct class
-        public UpdateCustomerResponse UpdateCustomer(int customerId, UpdateCustomerRequest r)
+        public UpdateUserResponse UpdateCustomer(int userId, UpdateUserRequest r)
         {
-            var response = new UpdateCustomerResponse();
+            var response = new UpdateUserResponse();
             try
             {
-                if (r.Age < 12)
-                {
-                    response.isSuccess = false;
-                    response.Message = "Age must be at least 12.";
-                    return response;
-                }
-
                 using (var conn = GetConnection())
                 {
                     conn.Open();
@@ -400,7 +619,6 @@ namespace BaseCode.Models
                     {
                         try
                         {
-                            // Update customer details
                             string updateCustomerQuery = @"
                                 UPDATE CUSTOMERS 
                                 SET FIRSTNAME = @FirstName,
@@ -416,14 +634,13 @@ namespace BaseCode.Models
                             using (var cmd = new MySqlCommand(updateCustomerQuery, conn, transaction))
                             {
                                 DateTime now = DateTime.Now;
-                                cmd.Parameters.AddWithValue("@CustomerId", customerId);
+                                cmd.Parameters.AddWithValue("@CustomerId", userId);
                                 cmd.Parameters.AddWithValue("@FirstName", r.FirstName);
                                 cmd.Parameters.AddWithValue("@LastName", r.LastName);
                                 cmd.Parameters.AddWithValue("@Email", r.Email);
-                                cmd.Parameters.AddWithValue("@PhoneNumber", r.PhoneNumber ?? (object)DBNull.Value);
-                                cmd.Parameters.AddWithValue("@Age", r.Age);
-                                cmd.Parameters.AddWithValue("@Birthday", r.Birthday ?? (object)DBNull.Value);
-                                cmd.Parameters.AddWithValue("@CivilStatus", r.CivilStatus ?? (object)DBNull.Value);
+                                cmd.Parameters.AddWithValue("@PhoneNumber", r.PhoneNumber);
+                                cmd.Parameters.AddWithValue("@Birthday", r.Birthday);
+                                cmd.Parameters.AddWithValue("@CivilStatus", r.CivilStatus);
                                 cmd.Parameters.AddWithValue("@UpdateDate", now);
 
                                 int rowsAffected = cmd.ExecuteNonQuery();
@@ -450,7 +667,7 @@ namespace BaseCode.Models
 
                                     using (var addrCmd = new MySqlCommand(addressQuery, conn, transaction))
                                     {
-                                        addrCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                                        addrCmd.Parameters.AddWithValue("@CustomerId", userId);
                                         addrCmd.Parameters.AddWithValue("@Street", r.Address.Street);
                                         addrCmd.Parameters.AddWithValue("@City", r.Address.City);
                                         addrCmd.Parameters.AddWithValue("@State", r.Address.State);
@@ -465,7 +682,7 @@ namespace BaseCode.Models
                                 transaction.Commit();
                                 response.isSuccess = true;
                                 response.Message = "Customer updated successfully";
-                                response.CustomerId = customerId;
+                                response.UserId = userId;
                                 response.UpdateDate = now;
                             }
                         }
@@ -485,146 +702,7 @@ namespace BaseCode.Models
             return response;
         }
 
-        // Update the UpdateCustomerById method
-        public UpdateCustomerResponse UpdateCustomerById(UpdateCustomerByIdRequest r)
-        {
-            var response = new UpdateCustomerResponse();
-            try
-            {
-                if (!int.TryParse(r.CustomerId, out int customerId))
-                {
-                    response.isSuccess = false;
-                    response.Message = "Invalid Customer ID format.";
-                    return response;
-                }
-
-                if (r.Age < 12)
-                {
-                    response.isSuccess = false;
-                    response.Message = "Age must be at least 12.";
-                    return response;
-                }
-
-                using (var conn = GetConnection())
-                {
-                    conn.Open();
-
-                    // First check if customer exists
-                    using (var checkCmd = new MySqlCommand(
-                        "SELECT COUNT(*) FROM CUSTOMERS WHERE CUSTOMERID = @CustomerId", conn))
-                    {
-                        checkCmd.Parameters.AddWithValue("@CustomerId", customerId);
-                        int exists = Convert.ToInt32(checkCmd.ExecuteScalar());
-                        if (exists == 0)
-                        {
-                            response.isSuccess = false;
-                            response.Message = "Customer not found.";
-                            return response;
-                        }
-                    }
-
-                    // Check if email is already used by another customer
-                    using (var emailCmd = new MySqlCommand(
-                        "SELECT COUNT(*) FROM CUSTOMERS WHERE EMAIL = @Email AND CUSTOMERID != @CustomerId", conn))
-                    {
-                        emailCmd.Parameters.AddWithValue("@Email", r.Email);
-                        emailCmd.Parameters.AddWithValue("@CustomerId", customerId);
-                        int emailExists = Convert.ToInt32(emailCmd.ExecuteScalar());
-                        if (emailExists > 0)
-                        {
-                            response.isSuccess = false;
-                            response.Message = "Email already exists for another customer.";
-                            return response;
-                        }
-                    }
-
-                    using (var transaction = conn.BeginTransaction())
-                    {
-                        try
-                        {
-                            DateTime now = DateTime.Now;
-
-                            // Update customer details including account status
-                            string updateCustomerQuery = @"
-                                UPDATE CUSTOMERS 
-                                SET FIRSTNAME = @FirstName,
-                                    LASTNAME = @LastName,
-                                    EMAIL = @Email,
-                                    PHONENUMBER = @PhoneNumber,
-                                    AGE = @Age,
-                                    BIRTHDAY = @Birthday,
-                                    CIVIL_STATUS = @CivilStatus,
-                                    ACCOUNT_STATUS = @AccountStatus,
-                                    UPDATEDATE = @UpdateDate
-                                WHERE CUSTOMERID = @CustomerId";
-
-                            using (var cmd = new MySqlCommand(updateCustomerQuery, conn, transaction))
-                            {
-                                cmd.Parameters.AddWithValue("@CustomerId", customerId);
-                                cmd.Parameters.AddWithValue("@FirstName", r.FirstName);
-                                cmd.Parameters.AddWithValue("@LastName", r.LastName);
-                                cmd.Parameters.AddWithValue("@Email", r.Email);
-                                cmd.Parameters.AddWithValue("@PhoneNumber", r.PhoneNumber ?? (object)DBNull.Value);
-                                cmd.Parameters.AddWithValue("@Age", r.Age);
-                                cmd.Parameters.AddWithValue("@Birthday", r.Birthday ?? (object)DBNull.Value);
-                                cmd.Parameters.AddWithValue("@CivilStatus", r.CivilStatus ?? (object)DBNull.Value);
-                                cmd.Parameters.AddWithValue("@AccountStatus", r.AccountStatus);
-                                cmd.Parameters.AddWithValue("@UpdateDate", now);
-
-                                cmd.ExecuteNonQuery();
-                            }
-
-                            // Handle address update
-                            if (r.Address != null)
-                            {
-                                string addressQuery = @"
-                                    INSERT INTO CUSTOMER_ADDRESSES 
-                                        (CUSTOMERID, STREET, CITY, STATE, ZIPCODE, COUNTRY, CREATEDATE)
-                                    VALUES 
-                                        (@CustomerId, @Street, @City, @State, @ZipCode, @Country, @CreateDate)
-                                    ON DUPLICATE KEY UPDATE
-                                        STREET = @Street,
-                                        CITY = @City,
-                                        STATE = @State,
-                                        ZIPCODE = @ZipCode,
-                                        COUNTRY = @Country,
-                                        UPDATEDATE = @CreateDate";
-
-                                using (var addrCmd = new MySqlCommand(addressQuery, conn, transaction))
-                                {
-                                    addrCmd.Parameters.AddWithValue("@CustomerId", customerId);
-                                    addrCmd.Parameters.AddWithValue("@Street", r.Address.Street);
-                                    addrCmd.Parameters.AddWithValue("@City", r.Address.City);
-                                    addrCmd.Parameters.AddWithValue("@State", r.Address.State);
-                                    addrCmd.Parameters.AddWithValue("@ZipCode", r.Address.ZipCode);
-                                    addrCmd.Parameters.AddWithValue("@Country", r.Address.Country);
-                                    addrCmd.Parameters.AddWithValue("@CreateDate", now);
-
-                                    addrCmd.ExecuteNonQuery();
-                                }
-                            }
-
-                            transaction.Commit();
-                            response.CustomerId = customerId;
-                            response.UpdateDate = now;
-                            response.isSuccess = true;
-                            response.Message = "Customer updated successfully.";
-                        }
-                        catch (Exception)
-                        {
-                            transaction.Rollback();
-                            throw;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                response.isSuccess = false;
-                response.Message = $"Error updating customer: {ex.Message}";
-            }
-            return response;
-        }
+       
 
         // Add this method to the DBCrudAct class
         public ForgetPasswordResponse RequestPasswordReset(ForgetPasswordRequest request)
@@ -908,73 +986,6 @@ namespace BaseCode.Models
             return response;
         }
 
-        // Add this method to the DBCrudAct class
-        public GetActiveCustomersResponse GetActiveCustomers()
-        {
-            var response = new GetActiveCustomersResponse
-            {
-                Customers = new List<ActiveCustomer>()
-            };
-
-            try
-            {
-                using (MySqlConnection conn = GetConnection())
-                {
-                    conn.Open();
-                    
-                    string sql = @"
-                        SELECT 
-                            c.CUSTOMERID, c.FIRSTNAME, c.LASTNAME, c.EMAIL, c.PHONENUMBER,
-                            c.AGE, c.BIRTHDAY, c.CIVIL_STATUS, c.CREATEDATE,
-                            ca.STREET, ca.CITY, ca.STATE, ca.ZIPCODE, ca.COUNTRY
-                        FROM CUSTOMERS c
-                        LEFT JOIN CUSTOMER_ADDRESSES ca ON c.CUSTOMERID = ca.CUSTOMERID
-                        WHERE c.ACCOUNT_STATUS = 'A'
-                        ORDER BY c.CUSTOMERID";
-
-                    using (MySqlCommand cmd = new MySqlCommand(sql, conn))
-                    {
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            while (reader.Read())
-                            {
-                                var customer = new ActiveCustomer
-                                {
-                                    CustomerId = reader.GetInt32("CUSTOMERID"),
-                                    FirstName = reader.GetString("FIRSTNAME"),
-                                    LastName = reader.GetString("LASTNAME"),
-                                    Email = reader.GetString("EMAIL"),
-                                    PhoneNumber = reader.IsDBNull("PHONENUMBER") ? null : reader.GetString("PHONENUMBER"),
-                                    Age = reader.GetInt32("AGE"),
-                                    Birthday = reader.GetDateTime("BIRTHDAY"),
-                                    CivilStatus = reader.GetString("CIVIL_STATUS"),
-                                    CreateDate = reader.GetDateTime("CREATEDATE"),
-                                    Address = !reader.IsDBNull("STREET") ? new CustomerAddress
-                                    {
-                                        Street = reader.GetString("STREET"),
-                                        City = reader.GetString("CITY"),
-                                        State = reader.GetString("STATE"),
-                                        ZipCode = reader.GetString("ZIPCODE"),
-                                        Country = reader.GetString("COUNTRY")
-                                    } : null
-                                };
-                                response.Customers.Add(customer);
-                            }
-                        }
-                    }
-                }
-
-                response.isSuccess = true;
-                response.Message = "Active customers retrieved successfully.";
-            }
-            catch (Exception ex)
-            {
-                response.isSuccess = false;
-                response.Message = "Error retrieving active customers: " + ex.Message;
-            }
-
-            return response;
-        }
 
         // Add this method to the DBCrudAct class
         public DeleteUserResponse DeleteUser(DeleteUserRequest request)

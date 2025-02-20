@@ -53,8 +53,8 @@ namespace BaseCode.Controllers
             .ToArray();
         }
 
-        [HttpPost("CreateCustomer")]
-        public IActionResult CreateCustomer([FromBody] CreateCustomerRequest r)
+        [HttpPost("CreateUser")]
+        public IActionResult CreateUser([FromBody] CreateUserRequest r)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
@@ -65,6 +65,51 @@ namespace BaseCode.Controllers
             else
                 return BadRequest(response);
         }
+
+        [HttpGet("ActiveUsers")]
+        public IActionResult GetActiveUsers()
+        {
+            var response = db.GetActiveUsers();
+            if (response.isSuccess)
+                return Ok(response);
+            else
+                return BadRequest(response);
+        }
+
+        [HttpPost("UpdateUserById")]
+        public IActionResult UpdateUserById([FromBody] UpdateUserByIdRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = db.UpdateUserById(request);
+            if (response.isSuccess)
+                return Ok(response);
+            else
+                return BadRequest(response);
+        }
+
+        [HttpPost("DeleteUser")]
+        public IActionResult DeleteUser([FromBody] DeleteUserRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                var response = db.DeleteUser(request);
+                if (response.isSuccess)
+                    return Ok(response);
+                else
+                    return BadRequest(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { isSuccess = false, Message = "Error deleting user: " + ex.Message });
+            }
+        }
+
+
 
         [HttpPost("Login")]
         public IActionResult Login([FromBody] CustomerLoginRequest request)
@@ -194,31 +239,31 @@ namespace BaseCode.Controllers
             }
         }
 
-        [Authorize]
-        [HttpPut("update-profile")]
-        public IActionResult UpdateCustomerProfile([FromBody] UpdateCustomerRequest request)
-        {
-            try
-            {
-                var customerIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(customerIdClaim))
-                {
-                    return Unauthorized(new { Message = "Invalid token" });
-                }
+        //[Authorize]
+        //[HttpPut("update-profile")]
+        //public IActionResult UpdateCustomerProfile([FromBody] UpdateUserRequest request)
+        //{
+        //    try
+        //    {
+        //        var customerIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        //        if (string.IsNullOrEmpty(customerIdClaim))
+        //        {
+        //            return Unauthorized(new { Message = "Invalid token" });
+        //        }
 
-                int customerId = int.Parse(customerIdClaim);
-                var response = db.UpdateCustomer(customerId, request);
+        //        int customerId = int.Parse(customerIdClaim);
+        //        var response = db.UpdateCustomer(customerId, request);
 
-                if (response.isSuccess)
-                    return Ok(response);
-                else
-                    return BadRequest(response);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { isSuccess = false, Message = "Error updating profile: " + ex.Message });
-            }
-        }
+        //        if (response.isSuccess)
+        //            return Ok(response);
+        //        else
+        //            return BadRequest(response);
+        //    }
+        //    catch (Exception ex)
+        //    {
+        //        return BadRequest(new { isSuccess = false, Message = "Error updating profile: " + ex.Message });
+        //    }
+        //}
 
         [HttpPost("forget-password")]
         public IActionResult ForgetPassword([FromBody] ForgetPasswordRequest request)
@@ -259,47 +304,8 @@ namespace BaseCode.Controllers
             return Ok(response);
         }
 
-        [HttpGet("active-customers")]
-        public IActionResult GetActiveCustomers()
-        {
-            var response = db.GetActiveCustomers();
-            if (response.isSuccess)
-                return Ok(response);
-            else
-                return BadRequest(response);
-        }
 
-        [HttpPost("UpdateCustomerById")]
-        public IActionResult UpdateCustomerById([FromBody] UpdateCustomerByIdRequest request)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+     
 
-            var response = db.UpdateCustomerById(request);
-            if (response.isSuccess)
-                return Ok(response);
-            else
-                return BadRequest(response);
-        }
-
-        [HttpPost("DeleteUser")]
-        public IActionResult DeleteUser([FromBody] DeleteUserRequest request)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            try
-            {
-                var response = db.DeleteUser(request);
-                if (response.isSuccess)
-                    return Ok(response);
-                else
-                    return BadRequest(response);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { isSuccess = false, Message = "Error deleting user: " + ex.Message });
-            }
-        }
     }
 }
