@@ -4,7 +4,7 @@ namespace BaseCode.Models.Requests.forCrudAct
 {
     public class DeleteUserRequest
     {
-        [Required(ErrorMessage = "Customer ID is required")]
-        public string CustomerId { get; set; }
+        [Required(ErrorMessage = "User ID is required")]
+        public string UserId { get; set; }  
     }
 }

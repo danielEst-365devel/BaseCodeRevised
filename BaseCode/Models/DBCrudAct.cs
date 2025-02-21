@@ -27,6 +27,8 @@ namespace BaseCode.Models
             return new MySqlConnection(ConnectionString);
         }
 
+        // START OF CRUD METHODS
+
         public CreateUserResponse CreateCustomer(CreateUserRequest r)
         {
             CreateUserResponse resp = new CreateUserResponse();
@@ -196,8 +198,6 @@ namespace BaseCode.Models
             return response;
         }
 
-
-        // Update the UpdateCustomerById method
         public UpdateUserResponse UpdateUserById(UpdateUserByIdRequest r)
         {
             var response = new UpdateUserResponse();
@@ -350,89 +350,161 @@ namespace BaseCode.Models
             return response;
         }
 
-
-        public CustomerLoginResponse LoginCustomer(CustomerLoginRequest r)
+        public DeleteUserResponse DeleteUser(DeleteUserRequest request)
         {
-            CustomerLoginResponse resp = new CustomerLoginResponse();
+            var response = new DeleteUserResponse();
             try
             {
-                using (MySqlConnection conn = GetConnection())
+                if (!int.TryParse(request.UserId, out int userId))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Invalid User ID format.";
+                    return response;
+                }
+
+                using (var conn = GetConnection())
                 {
                     conn.Open();
-                    MySqlCommand cmd = new MySqlCommand(
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            var checkCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM USERS WHERE USER_ID = @UserId AND ACCOUNT_STATUS = 'A'",
+                                conn, transaction);
+                            checkCmd.Parameters.AddWithValue("@UserId", userId);
+                            int exists = Convert.ToInt32(checkCmd.ExecuteScalar());
+
+                            if (exists == 0)
+                            {
+                                response.isSuccess = false;
+                                response.Message = "User not found or already inactive.";
+                                return response;
+                            }
+
+                            // Update account status to 'I'
+                            DateTime now = DateTime.Now;
+                            var updateCmd = new MySqlCommand(
+                                "UPDATE USERS SET ACCOUNT_STATUS = 'I', UPDATEDATE = @UpdateDate " +
+                                "WHERE USER_ID = @UserId",
+                                conn, transaction);
+                            updateCmd.Parameters.AddWithValue("@UserId", userId);
+                            updateCmd.Parameters.AddWithValue("@UpdateDate", now);
+
+                            updateCmd.ExecuteNonQuery();
+
+                            transaction.Commit();
+                            response.UserId = userId;
+                            response.UpdateDate = now;
+                            response.isSuccess = true;
+                            response.Message = "User deleted successfully.";
+                        }
+                        catch (Exception ex)
+                        {
+                            transaction.Rollback();
+                            response.isSuccess = false;
+                            response.Message = $"Error during deletion: {ex.Message}";
+                            return response;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error deleting user: {ex.Message}";
+            }
+            return response;
+        }
+
+        // END OF CRUD METHODS
+
+        public UserLoginResponse LoginUser(UserLoginRequest r)
+        {
+            var resp = new UserLoginResponse();
+            try
+            {
+                using (var conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var cmd = new MySqlCommand(
                         "SELECT USER_ID, EMAIL, PASSWORD, FIRST_NAME, LAST_NAME, ACCOUNT_STATUS " +
-                        "FROM USERS WHERE EMAIL = @Email", conn);
-                    cmd.Parameters.AddWithValue("@Email", r.Email);
-
-                    using (var reader = cmd.ExecuteReader())
+                        "FROM USERS WHERE EMAIL = @Email", conn))
                     {
-                        if (reader.Read())
+                        cmd.Parameters.AddWithValue("@Email", r.Email);
+
+                        using (var reader = cmd.ExecuteReader())
                         {
-                            int customerId = Convert.ToInt32(reader["USER_ID"]);
-                            string email = reader["EMAIL"].ToString();
-                            string storedHash = reader["PASSWORD"].ToString();
-                            string firstName = reader["FIRST_NAME"].ToString();
-                            string lastName = reader["LAST_NAME"].ToString();
-                            string accountStatus = reader["ACCOUNT_STATUS"].ToString();
-
-                            reader.Close();
-
-                            if (accountStatus != "A")
+                            if (reader.Read())
                             {
-                                resp.isSuccess = false;
-                                resp.Message = "Account inactive";
-                                conn.Close();
-                                return resp;
-                            }
-                                                       
-                            MySqlCommand countCmd = new MySqlCommand(
-                            "SELECT COUNT(*) FROM FAILED_LOGINS WHERE USER_ID = @UserId", conn);
-                            countCmd.Parameters.AddWithValue("@UserId", customerId);
-                            int failedAttempts = Convert.ToInt32(countCmd.ExecuteScalar());
+                                int userId = Convert.ToInt32(reader["USER_ID"]);
+                                string email = reader["EMAIL"].ToString();
+                                string storedHash = reader["PASSWORD"].ToString();
+                                string firstName = reader["FIRST_NAME"].ToString();
+                                string lastName = reader["LAST_NAME"].ToString();
+                                string accountStatus = reader["ACCOUNT_STATUS"].ToString();
 
-                            if (failedAttempts >= 5)
-                            {
-                                resp.isSuccess = false;
-                                resp.Message = "Account locked due to too many failed login attempts";
-                                conn.Close();
-                                return resp;
-                            }
+                                reader.Close();
 
-                            bool verified = PasswordHasher.VerifyPassword(r.Password, storedHash);
+                                if (accountStatus != "A")
+                                {
+                                    resp.isSuccess = false;
+                                    resp.Message = "Account inactive";
+                                    return resp;
+                                }
 
-                            if (verified)
-                            {
-                               
-                                MySqlCommand deleteCmd = new MySqlCommand(
-                                "DELETE FROM FAILED_LOGINS WHERE USER_ID = @UserId", conn);
-                                deleteCmd.Parameters.AddWithValue("@UserId", customerId);
-                                deleteCmd.ExecuteNonQuery();
+                                using (var countCmd = new MySqlCommand(
+                                    "SELECT COUNT(*) FROM FAILED_LOGINS WHERE USER_ID = @UserId", conn))
+                                {
+                                    countCmd.Parameters.AddWithValue("@UserId", userId);
+                                    int failedAttempts = Convert.ToInt32(countCmd.ExecuteScalar());
 
-                                resp.isSuccess = true;
-                                resp.CustomerId = customerId;
-                                resp.Email = email;
-                                resp.FirstName = firstName;
-                                resp.LastName = lastName;
-                                resp.Message = "Login successful";
+                                    if (failedAttempts >= 5)
+                                    {
+                                        resp.isSuccess = false;
+                                        resp.Message = "Account locked due to too many failed login attempts";
+                                        return resp;
+                                    }
+                                }
+
+                                bool verified = PasswordHasher.VerifyPassword(r.Password, storedHash);
+
+                                if (verified)
+                                {
+                                    using (var deleteCmd = new MySqlCommand(
+                                        "DELETE FROM FAILED_LOGINS WHERE USER_ID = @UserId", conn))
+                                    {
+                                        deleteCmd.Parameters.AddWithValue("@UserId", userId);
+                                        deleteCmd.ExecuteNonQuery();
+                                    }
+
+                                    resp.isSuccess = true;
+                                    resp.UserId = userId;
+                                    resp.Email = email;
+                                    resp.FirstName = firstName;
+                                    resp.LastName = lastName;
+                                    resp.Message = "Login successful";
+                                }
+                                else
+                                {
+                                    using (var insertCmd = new MySqlCommand(
+                                        "INSERT INTO FAILED_LOGINS (USER_ID) VALUES (@UserId)", conn))
+                                    {
+                                        insertCmd.Parameters.AddWithValue("@UserId", userId);
+                                        insertCmd.ExecuteNonQuery();
+                                    }
+
+                                    resp.isSuccess = false;
+                                    resp.Message = "Invalid password";
+                                }
                             }
                             else
                             {
-                                MySqlCommand insertCmd = new MySqlCommand(
-                                "INSERT INTO FAILED_LOGINS (USER_ID) VALUES (@UserId)", conn);
-                                insertCmd.Parameters.AddWithValue("@UserId", customerId);
-                                insertCmd.ExecuteNonQuery();
-
                                 resp.isSuccess = false;
-                                resp.Message = "Invalid password";
+                                resp.Message = "Email not found";
                             }
                         }
-                        else
-                        {
-                            resp.isSuccess = false;
-                            resp.Message = "Email not found";
-                        }
                     }
-                    conn.Close();
                 }
             }
             catch (Exception ex)
@@ -443,86 +515,90 @@ namespace BaseCode.Models
             return resp;
         }
 
-        
-        public CustomerLoginResponse LoginCustomerWithCookie(CustomerLoginRequest r)
+        public UserLoginResponse LoginUserWithCookie(UserLoginRequest r)
         {
-            CustomerLoginResponse resp = new CustomerLoginResponse();
+            var resp = new UserLoginResponse();
             try
             {
-                using (MySqlConnection conn = GetConnection())
+                using (var conn = GetConnection())
                 {
                     conn.Open();
-                    MySqlCommand cmd = new MySqlCommand(
-                        "SELECT CUSTOMERID, EMAIL, PASSWORD, FIRSTNAME, LASTNAME, ACCOUNT_STATUS " +
-                        "FROM CUSTOMERS WHERE EMAIL = @Email", conn);
-                    cmd.Parameters.AddWithValue("@Email", r.Email);
-
-                    using (var reader = cmd.ExecuteReader())
+                    using (var cmd = new MySqlCommand(
+                        "SELECT USER_ID, EMAIL, PASSWORD, FIRST_NAME, LAST_NAME, ACCOUNT_STATUS " +
+                        "FROM USERS WHERE EMAIL = @Email", conn))
                     {
-                        if (reader.Read())
+                        cmd.Parameters.AddWithValue("@Email", r.Email);
+
+                        using (var reader = cmd.ExecuteReader())
                         {
-                            int customerId = Convert.ToInt32(reader["CUSTOMERID"]);
-                            string email = reader["EMAIL"].ToString();
-                            string storedHash = reader["PASSWORD"].ToString();
-                            string firstName = reader["FIRSTNAME"].ToString();
-                            string lastName = reader["LASTNAME"].ToString();
-                            string accountStatus = reader["ACCOUNT_STATUS"].ToString();
-
-                            reader.Close();
-
-                            if (accountStatus != "A")
+                            if (reader.Read())
                             {
-                                resp.isSuccess = false;
-                                resp.Message = "Account inactive";
-                                return resp;
-                            }
+                                int userId = Convert.ToInt32(reader["USER_ID"]);
+                                string email = reader["EMAIL"].ToString();
+                                string storedHash = reader["PASSWORD"].ToString();
+                                string firstName = reader["FIRST_NAME"].ToString();
+                                string lastName = reader["LAST_NAME"].ToString();
+                                string accountStatus = reader["ACCOUNT_STATUS"].ToString();
 
-                            // Check failed login attempts
-                            MySqlCommand countCmd = new MySqlCommand(
-                                "SELECT COUNT(*) FROM FAILED_LOGINS WHERE CUSTOMERID = @CustomerId", conn);
-                            countCmd.Parameters.AddWithValue("@CustomerId", customerId);
-                            int failedAttempts = Convert.ToInt32(countCmd.ExecuteScalar());
+                                reader.Close();
 
-                            if (failedAttempts >= 5)
-                            {
-                                resp.isSuccess = false;
-                                resp.Message = "Account locked due to too many failed login attempts";
-                                return resp;
-                            }
+                                if (accountStatus != "A")
+                                {
+                                    resp.isSuccess = false;
+                                    resp.Message = "Account inactive";
+                                    return resp;
+                                }
 
-                            bool verified = PasswordHasher.VerifyPassword(r.Password, storedHash);
+                                using (var countCmd = new MySqlCommand(
+                                    "SELECT COUNT(*) FROM FAILED_LOGINS WHERE USER_ID = @UserId", conn))
+                                {
+                                    countCmd.Parameters.AddWithValue("@UserId", userId);
+                                    int failedAttempts = Convert.ToInt32(countCmd.ExecuteScalar());
 
-                            if (verified)
-                            {
-                                // Clear failed login attempts
-                                MySqlCommand deleteCmd = new MySqlCommand(
-                                    "DELETE FROM FAILED_LOGINS WHERE CUSTOMERID = @CustomerId", conn);
-                                deleteCmd.Parameters.AddWithValue("@CustomerId", customerId);
-                                deleteCmd.ExecuteNonQuery();
+                                    if (failedAttempts >= 5)
+                                    {
+                                        resp.isSuccess = false;
+                                        resp.Message = "Account locked due to too many failed login attempts";
+                                        return resp;
+                                    }
+                                }
 
-                                resp.isSuccess = true;
-                                resp.CustomerId = customerId;
-                                resp.Email = email;
-                                resp.FirstName = firstName;
-                                resp.LastName = lastName;
-                                resp.Message = "Login successful";
+                                bool verified = PasswordHasher.VerifyPassword(r.Password, storedHash);
+
+                                if (verified)
+                                {
+                                    using (var deleteCmd = new MySqlCommand(
+                                        "DELETE FROM FAILED_LOGINS WHERE USER_ID = @UserId", conn))
+                                    {
+                                        deleteCmd.Parameters.AddWithValue("@UserId", userId);
+                                        deleteCmd.ExecuteNonQuery();
+                                    }
+
+                                    resp.isSuccess = true;
+                                    resp.UserId = userId;
+                                    resp.Email = email;
+                                    resp.FirstName = firstName;
+                                    resp.LastName = lastName;
+                                    resp.Message = "Login successful";
+                                }
+                                else
+                                {
+                                    using (var insertCmd = new MySqlCommand(
+                                        "INSERT INTO FAILED_LOGINS (USER_ID) VALUES (@UserId)", conn))
+                                    {
+                                        insertCmd.Parameters.AddWithValue("@UserId", userId);
+                                        insertCmd.ExecuteNonQuery();
+                                    }
+
+                                    resp.isSuccess = false;
+                                    resp.Message = "Invalid password";
+                                }
                             }
                             else
                             {
-                                // Log failed login attempt
-                                MySqlCommand insertCmd = new MySqlCommand(
-                                    "INSERT INTO FAILED_LOGINS (CUSTOMERID) VALUES (@CustomerId)", conn);
-                                insertCmd.Parameters.AddWithValue("@CustomerId", customerId);
-                                insertCmd.ExecuteNonQuery();
-
                                 resp.isSuccess = false;
-                                resp.Message = "Invalid password";
+                                resp.Message = "Email not found";
                             }
-                        }
-                        else
-                        {
-                            resp.isSuccess = false;
-                            resp.Message = "Email not found";
                         }
                     }
                 }
@@ -535,7 +611,6 @@ namespace BaseCode.Models
             return resp;
         }
 
-       
         public UserProfileResponse GetCustomerProfile(int userId)
         {
             using (var conn = GetConnection())
@@ -986,73 +1061,6 @@ namespace BaseCode.Models
             return response;
         }
 
-
-        // Add this method to the DBCrudAct class
-        public DeleteUserResponse DeleteUser(DeleteUserRequest request)
-        {
-            var response = new DeleteUserResponse();
-            try
-            {
-                if (!int.TryParse(request.CustomerId, out int customerId))
-                {
-                    response.isSuccess = false;
-                    response.Message = "Invalid Customer ID format.";
-                    return response;
-                }
-
-                using (var conn = GetConnection())
-                {
-                    conn.Open();
-                    using (var transaction = conn.BeginTransaction())
-                    {
-                        try
-                        {
-                            // Check if customer exists
-                            var checkCmd = new MySqlCommand(
-                                "SELECT COUNT(*) FROM CUSTOMERS WHERE CUSTOMERID = @CustomerId",
-                                conn, transaction);
-                            checkCmd.Parameters.AddWithValue("@CustomerId", customerId);
-                            int exists = Convert.ToInt32(checkCmd.ExecuteScalar());
-
-                            if (exists == 0)
-                            {
-                                response.isSuccess = false;
-                                response.Message = "Customer not found or already inactive.";
-                                return response;
-                            }
-
-                            // Update account status to 'I'
-                            DateTime now = DateTime.Now;
-                            var updateCmd = new MySqlCommand(
-                                "UPDATE CUSTOMERS SET ACCOUNT_STATUS = 'I', UPDATEDATE = @UpdateDate " +
-                                "WHERE CUSTOMERID = @CustomerId",
-                                conn, transaction);
-                            updateCmd.Parameters.AddWithValue("@CustomerId", customerId);
-                            updateCmd.Parameters.AddWithValue("@UpdateDate", now);
-
-                            updateCmd.ExecuteNonQuery();
-
-                            transaction.Commit();
-                            response.CustomerId = customerId;
-                            response.UpdateDate = now;
-                            response.isSuccess = true;
-                            response.Message = "User deleted successfully.";
-                        }
-                        catch (Exception)
-                        {
-                            transaction.Rollback();
-                            throw;
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                response.isSuccess = false;
-                response.Message = $"Error deleting user: {ex.Message}";
-            }
-            return response;
-        }
     }
 }
 

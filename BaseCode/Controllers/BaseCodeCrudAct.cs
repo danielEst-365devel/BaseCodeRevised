@@ -53,6 +53,8 @@ namespace BaseCode.Controllers
             .ToArray();
         }
 
+        // START OF BASIC CRUD CONTROLLERS
+
         [HttpPost("CreateUser")]
         public IActionResult CreateUser([FromBody] CreateUserRequest r)
         {
@@ -95,48 +97,39 @@ namespace BaseCode.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            try
-            {
-                var response = db.DeleteUser(request);
-                if (response.isSuccess)
-                    return Ok(response);
-                else
-                    return BadRequest(response);
-            }
-            catch (Exception ex)
-            {
-                return BadRequest(new { isSuccess = false, Message = "Error deleting user: " + ex.Message });
-            }
+            var response = db.DeleteUser(request);
+            if (response.isSuccess)
+                return Ok(response);
+            else
+                return BadRequest(response);
         }
 
-
+        // END OF BASIC CRUD CONTROLLERS
 
         [HttpPost("Login")]
-        public IActionResult Login([FromBody] CustomerLoginRequest request)
+        public IActionResult Login([FromBody] UserLoginRequest request)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var response = db.LoginCustomerWithCookie(request);
+            var response = db.LoginUserWithCookie(request);
 
             if (response.isSuccess)
             {
                 var jwtSettings = _configuration.GetSection("JwtSettings");
                 var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]);
-            
+
                 var tokenHandler = new JwtSecurityTokenHandler();
                 var tokenDescriptor = new SecurityTokenDescriptor
                 {
                     Subject = new ClaimsIdentity(new[]
                     {
-                        new Claim(ClaimTypes.NameIdentifier, response.CustomerId.ToString()),
+                        new Claim(ClaimTypes.NameIdentifier, response.UserId.ToString()),
                         new Claim(ClaimTypes.Email, response.Email),
                         new Claim(ClaimTypes.GivenName, response.FirstName),
                         new Claim(ClaimTypes.Surname, response.LastName)
                     }),
-                    Expires = request.RememberMe ? 
-                        DateTime.UtcNow.AddDays(14) : // 2 weeks for remember me
-                        DateTime.UtcNow.AddDays(1),   // 1 day default
+                    Expires = request.RememberMe ? DateTime.UtcNow.AddDays(14) : DateTime.UtcNow.AddDays(1),
                     Issuer = jwtSettings["Issuer"],
                     Audience = jwtSettings["Audience"],
                     SigningCredentials = new SigningCredentials(
@@ -151,47 +144,42 @@ namespace BaseCode.Controllers
                 var cookieOptions = new CookieOptions
                 {
                     HttpOnly = true,
-                    Secure = false, // Requires HTTPS
+                    Secure = true, // Enforce HTTPS in production
                     SameSite = SameSiteMode.Strict,
-                    Expires = tokenDescriptor.Expires,
+                    Expires = tokenDescriptor.Expires
                 };
 
                 Response.Cookies.Append("AuthToken", response.Token, cookieOptions);
+
+                return Ok(response);
             }
 
-            if (response.isSuccess)
-                return Ok(response);
-            else
-                return BadRequest(response);
+            return BadRequest(response);
         }
 
-
         [HttpPost("LoginWithHeader")]
-        public IActionResult LoginWithHeader([FromBody] CustomerLoginRequest request)
+        public IActionResult LoginWithHeader([FromBody] UserLoginRequest request)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var response = db.LoginCustomer(request);
+            var response = db.LoginUser(request);
 
             if (response.isSuccess)
             {
                 var jwtSettings = _configuration.GetSection("JwtSettings");
                 var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]);
-
                 var tokenHandler = new JwtSecurityTokenHandler();
                 var tokenDescriptor = new SecurityTokenDescriptor
                 {
                     Subject = new ClaimsIdentity(new[]
                     {
-                        new Claim(ClaimTypes.NameIdentifier, response.CustomerId.ToString()),
-                        new Claim(ClaimTypes.Email, response.Email),
-                        new Claim(ClaimTypes.GivenName, response.FirstName),
-                        new Claim(ClaimTypes.Surname, response.LastName)
-                    }),
-                    Expires = request.RememberMe ?
-                        DateTime.UtcNow.AddDays(14) : // 2 weeks for remember me
-                        DateTime.UtcNow.AddDays(1),   // 1 day default
+                new Claim(ClaimTypes.NameIdentifier, response.UserId.ToString()),
+                new Claim(ClaimTypes.Email, response.Email),
+                new Claim(ClaimTypes.GivenName, response.FirstName),
+                new Claim(ClaimTypes.Surname, response.LastName)
+            }),
+                    Expires = request.RememberMe ? DateTime.UtcNow.AddDays(14) : DateTime.UtcNow.AddDays(1),
                     Issuer = jwtSettings["Issuer"],
                     Audience = jwtSettings["Audience"],
                     SigningCredentials = new SigningCredentials(
@@ -201,15 +189,9 @@ namespace BaseCode.Controllers
 
                 var token = tokenHandler.CreateToken(tokenDescriptor);
                 response.Token = tokenHandler.WriteToken(token);
-
-                // Token will be sent in response body
-                // Client should store it and send in Authorization: Bearer <token> header
             }
 
-            if (response.isSuccess)
-                return Ok(response);
-            else
-                return BadRequest(response);
+            return response.isSuccess ? Ok(response) : BadRequest(response);
         }
 
         // Add [Authorize] attribute to protected endpoints
