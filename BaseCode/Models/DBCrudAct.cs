@@ -1,16 +1,18 @@
-﻿using System;
-using MySql.Data.MySqlClient;
-using System.Collections.Generic;
-using System.Linq;
-using System.Data;
+﻿using BaseCode.Models.Requests.forCrudAct;
 using BaseCode.Models.Responses.forCrudAct;
-using BaseCode.Models.Requests.forCrudAct;
 using BaseCode.Models.Tables;
-using System.Reflection;
 using BaseCode.Utils;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using MySql.Data.MySqlClient;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
+using System.Reflection;
+using System.Security.Claims;
 using System.Text;
 
 namespace BaseCode.Models
@@ -18,17 +20,32 @@ namespace BaseCode.Models
     public class DBCrudAct
     {
         public string ConnectionString { get; set; }
-        public DBCrudAct(string connStr)
+        private readonly IConfiguration _configuration;
+
+        public DBCrudAct(string connStr, IConfiguration configuration)
         {
             this.ConnectionString = connStr;
+            _configuration = configuration;
         }
         private MySqlConnection GetConnection()
         {
             return new MySqlConnection(ConnectionString);
         }
 
-        // START OF CRUD METHODS
+        /*
+        public class DBCrudAct
+        {
+           private readonly IConfiguration _configuration;
+           public string ConnectionString { get; set; }
 
+           public DBCrudAct(string connStr, IConfiguration configuration)
+           {
+               this.ConnectionString = connStr;
+               this._configuration = configuration;
+           }
+        */
+
+        // START OF CRUD METHODS
         public CreateUserResponse CreateCustomer(CreateUserRequest r)
         {
             CreateUserResponse resp = new CreateUserResponse();
@@ -266,17 +283,17 @@ namespace BaseCode.Models
 
                             // Update user details including account status and username
                             string updateUserQuery = @"
-                        UPDATE USERS 
-                        SET USER_NAME = @UserName,
-                            FIRST_NAME = @FirstName,
-                            LAST_NAME = @LastName,
-                            EMAIL = @Email,
-                            PHONE_NUMBER = @PhoneNumber,
-                            BIRTHDAY = @Birthday,
-                            CIVIL_STATUS = @CivilStatus,
-                            ACCOUNT_STATUS = @AccountStatus,
-                            UPDATEDATE = @UpdateDate
-                        WHERE USER_ID = @UserId";
+                            UPDATE USERS 
+                            SET USER_NAME = @UserName,
+                                FIRST_NAME = @FirstName,
+                                LAST_NAME = @LastName,
+                                EMAIL = @Email,
+                                PHONE_NUMBER = @PhoneNumber,
+                                BIRTHDAY = @Birthday,
+                                CIVIL_STATUS = @CivilStatus,
+                                ACCOUNT_STATUS = @AccountStatus,
+                                UPDATEDATE = @UpdateDate
+                            WHERE USER_ID = @UserId";
 
                             using (var cmd = new MySqlCommand(updateUserQuery, conn, transaction))
                             {
@@ -419,6 +436,7 @@ namespace BaseCode.Models
 
         // END OF CRUD METHODS
 
+
         public UserLoginResponse LoginUser(UserLoginRequest r)
         {
             var resp = new UserLoginResponse();
@@ -478,11 +496,87 @@ namespace BaseCode.Models
                                         deleteCmd.ExecuteNonQuery();
                                     }
 
+                                    // Fetch roles
+                                    var roles = new List<string>();
+                                    using (var roleCmd = new MySqlCommand(
+                                        "SELECT r.ROLE_NAME FROM USER_ROLES ur " +
+                                        "JOIN ROLES r ON ur.ROLE_ID = r.ROLE_ID " +
+                                        "WHERE ur.USER_ID = @UserId", conn))
+                                    {
+                                        roleCmd.Parameters.AddWithValue("@UserId", userId);
+                                        using (var roleReader = roleCmd.ExecuteReader())
+                                        {
+                                            while (roleReader.Read())
+                                            {
+                                                roles.Add(roleReader["ROLE_NAME"].ToString());
+                                            }
+                                        }
+                                    }
+
+                                    // Fetch permissions
+                                    var permissions = new List<string>();
+                                    using (var permCmd = new MySqlCommand(
+                                        "SELECT p.PERMISSION_NAME FROM USER_ROLES ur " +
+                                        "JOIN ROLE_PERMISSIONS rp ON ur.ROLE_ID = rp.ROLE_ID " +
+                                        "JOIN PERMISSIONS p ON rp.PERMISSION_ID = p.PERMISSION_ID " +
+                                        "WHERE ur.USER_ID = @UserId", conn))
+                                    {
+                                        permCmd.Parameters.AddWithValue("@UserId", userId);
+                                        using (var permReader = permCmd.ExecuteReader())
+                                        {
+                                            while (permReader.Read())
+                                            {
+                                                permissions.Add(permReader["PERMISSION_NAME"].ToString());
+                                            }
+                                        }
+                                    }
+
+                                    // Generate JWT with roles and permissions
+                                    var jwtSettings = GetJwtSettings();
+                                    var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]);
+                                    var tokenHandler = new JwtSecurityTokenHandler();
+                                    var claims = new List<Claim>
+                            {
+                                new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
+                                new Claim(ClaimTypes.Email, email),
+                                new Claim(ClaimTypes.GivenName, firstName),
+                                new Claim(ClaimTypes.Surname, lastName),
+                                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                            };
+                                    claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+                                    claims.AddRange(permissions.Select(perm => new Claim("permission", perm)));
+
+                                    var tokenDescriptor = new SecurityTokenDescriptor
+                                    {
+                                        Subject = new ClaimsIdentity(claims),
+                                        Expires = r.RememberMe ? DateTime.UtcNow.AddDays(14) : DateTime.UtcNow.AddDays(1),
+                                        Issuer = jwtSettings["Issuer"],
+                                        Audience = jwtSettings["Audience"],
+                                        SigningCredentials = new SigningCredentials(
+                                            new SymmetricSecurityKey(key),
+                                            SecurityAlgorithms.HmacSha256Signature)
+                                    };
+
+                                    var token = tokenHandler.CreateToken(tokenDescriptor);
+                                    string jwt = tokenHandler.WriteToken(token);
+
+                                    // Store JWT in SESSIONS
+                                    using (var sessionCmd = new MySqlCommand(
+                                        "INSERT INTO SESSIONS (SESSION_ID, USER_ID, EXPIRES_AT) " +
+                                        "VALUES (@SessionId, @UserId, @ExpiresAt)", conn))
+                                    {
+                                        sessionCmd.Parameters.AddWithValue("@SessionId", jwt);
+                                        sessionCmd.Parameters.AddWithValue("@UserId", userId);
+                                        sessionCmd.Parameters.AddWithValue("@ExpiresAt", tokenDescriptor.Expires.Value);
+                                        sessionCmd.ExecuteNonQuery();
+                                    }
+
                                     resp.isSuccess = true;
                                     resp.UserId = userId;
                                     resp.Email = email;
                                     resp.FirstName = firstName;
                                     resp.LastName = lastName;
+                                    resp.SessionId = jwt;
                                     resp.Message = "Login successful";
                                 }
                                 else
@@ -515,103 +609,15 @@ namespace BaseCode.Models
             return resp;
         }
 
-        public UserLoginResponse LoginUserWithCookie(UserLoginRequest r)
+
+        // Placeholder for JWT settings retrieval (adjust based on your setup)
+        private IConfigurationSection GetJwtSettings()
         {
-            var resp = new UserLoginResponse();
-            try
-            {
-                using (var conn = GetConnection())
-                {
-                    conn.Open();
-                    using (var cmd = new MySqlCommand(
-                        "SELECT USER_ID, EMAIL, PASSWORD, FIRST_NAME, LAST_NAME, ACCOUNT_STATUS " +
-                        "FROM USERS WHERE EMAIL = @Email", conn))
-                    {
-                        cmd.Parameters.AddWithValue("@Email", r.Email);
-
-                        using (var reader = cmd.ExecuteReader())
-                        {
-                            if (reader.Read())
-                            {
-                                int userId = Convert.ToInt32(reader["USER_ID"]);
-                                string email = reader["EMAIL"].ToString();
-                                string storedHash = reader["PASSWORD"].ToString();
-                                string firstName = reader["FIRST_NAME"].ToString();
-                                string lastName = reader["LAST_NAME"].ToString();
-                                string accountStatus = reader["ACCOUNT_STATUS"].ToString();
-
-                                reader.Close();
-
-                                if (accountStatus != "A")
-                                {
-                                    resp.isSuccess = false;
-                                    resp.Message = "Account inactive";
-                                    return resp;
-                                }
-
-                                using (var countCmd = new MySqlCommand(
-                                    "SELECT COUNT(*) FROM FAILED_LOGINS WHERE USER_ID = @UserId", conn))
-                                {
-                                    countCmd.Parameters.AddWithValue("@UserId", userId);
-                                    int failedAttempts = Convert.ToInt32(countCmd.ExecuteScalar());
-
-                                    if (failedAttempts >= 5)
-                                    {
-                                        resp.isSuccess = false;
-                                        resp.Message = "Account locked due to too many failed login attempts";
-                                        return resp;
-                                    }
-                                }
-
-                                bool verified = PasswordHasher.VerifyPassword(r.Password, storedHash);
-
-                                if (verified)
-                                {
-                                    using (var deleteCmd = new MySqlCommand(
-                                        "DELETE FROM FAILED_LOGINS WHERE USER_ID = @UserId", conn))
-                                    {
-                                        deleteCmd.Parameters.AddWithValue("@UserId", userId);
-                                        deleteCmd.ExecuteNonQuery();
-                                    }
-
-                                    resp.isSuccess = true;
-                                    resp.UserId = userId;
-                                    resp.Email = email;
-                                    resp.FirstName = firstName;
-                                    resp.LastName = lastName;
-                                    resp.Message = "Login successful";
-                                }
-                                else
-                                {
-                                    using (var insertCmd = new MySqlCommand(
-                                        "INSERT INTO FAILED_LOGINS (USER_ID) VALUES (@UserId)", conn))
-                                    {
-                                        insertCmd.Parameters.AddWithValue("@UserId", userId);
-                                        insertCmd.ExecuteNonQuery();
-                                    }
-
-                                    resp.isSuccess = false;
-                                    resp.Message = "Invalid password";
-                                }
-                            }
-                            else
-                            {
-                                resp.isSuccess = false;
-                                resp.Message = "Email not found";
-                            }
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                resp.isSuccess = false;
-                resp.Message = "Login failed: " + ex.Message;
-            }
-            return resp;
+            return _configuration.GetSection("JwtSettings");
         }
 
-        public UserProfileResponse GetCustomerProfile(int userId)
+
+        public UserProfileResponse GetUserProfile(int userId)
         {
             using (var conn = GetConnection())
             {
@@ -620,32 +626,33 @@ namespace BaseCode.Models
 
                 try
                 {
-                    string customerQuery = @"SELECT 
-                    c.CUSTOMERID, c.FIRSTNAME, c.LASTNAME, c.EMAIL, 
-                    c.PHONENUMBER, c.AGE, c.BIRTHDAY, c.CIVIL_STATUS, 
-                    c.CREATEDATE,
-                    ca.STREET, ca.CITY, ca.STATE, ca.ZIPCODE, ca.COUNTRY
-                    FROM CUSTOMERS c
-                    LEFT JOIN CUSTOMER_ADDRESSES ca ON c.CUSTOMERID = ca.CUSTOMERID
-                    WHERE c.CUSTOMERID = @CustomerId";
+                    // First get the user basic info and address
+                    string userQuery = @"SELECT 
+                        u.USER_ID, u.USER_NAME, u.FIRST_NAME, u.LAST_NAME, u.EMAIL, 
+                        u.PHONE_NUMBER, u.AGE, u.BIRTHDAY, u.CIVIL_STATUS, 
+                        u.CREATEDATE, u.ACCOUNT_STATUS,
+                        ua.STREET, ua.CITY, ua.STATE, ua.ZIPCODE, ua.COUNTRY
+                        FROM USERS u
+                        LEFT JOIN USER_ADDRESSES ua ON u.USER_ID = ua.USER_ID
+                        WHERE u.USER_ID = @UserId";
 
-                    using (var cmd = new MySqlCommand(customerQuery, conn))
+                    using (var cmd = new MySqlCommand(userQuery, conn))
                     {
-                        cmd.Parameters.AddWithValue("@CustomerId", userId);
+                        cmd.Parameters.AddWithValue("@UserId", userId);
 
                         using (var reader = cmd.ExecuteReader())
                         {
                             if (reader.Read())
                             {
                                 response.isSuccess = true;
-                                response.Message = "Customer profile retrieved successfully";
-                                response.CustomerId = reader.GetInt32("CUSTOMERID");
-                                response.FirstName = reader.GetString("FIRSTNAME");
-                                response.LastName = reader.GetString("LASTNAME");
+                                response.Message = "User profile retrieved successfully";
+                                response.UserId = reader.GetInt32("USER_ID");
+                                response.FirstName = reader.GetString("FIRST_NAME");
+                                response.LastName = reader.GetString("LAST_NAME");
                                 response.Email = reader.GetString("EMAIL");
-                                response.PhoneNumber = reader.GetString("PHONENUMBER");
+                                response.PhoneNumber = reader.IsDBNull(reader.GetOrdinal("PHONE_NUMBER")) ? null : reader.GetString("PHONE_NUMBER");
                                 response.Age = reader.GetInt32("AGE");
-                                response.Birthday = reader.IsDBNull(reader.GetOrdinal("BIRTHDAY")) ? null : reader.GetDateTime("BIRTHDAY");
+                                response.Birthday = reader.GetDateTime("BIRTHDAY");
                                 response.CivilStatus = reader.GetString("CIVIL_STATUS");
                                 response.CreateDate = reader.GetDateTime("CREATEDATE");
 
@@ -665,7 +672,47 @@ namespace BaseCode.Models
                             else
                             {
                                 response.isSuccess = false;
-                                response.Message = "Customer not found";
+                                response.Message = "User not found";
+                                return response;
+                            }
+                        }
+                    }
+
+                    // Now get roles
+                    string rolesQuery = @"
+                        SELECT DISTINCT r.ROLE_NAME 
+                        FROM USER_ROLES ur
+                        JOIN ROLES r ON ur.ROLE_ID = r.ROLE_ID
+                        WHERE ur.USER_ID = @UserId";
+
+                    using (var cmd = new MySqlCommand(rolesQuery, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@UserId", userId);
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                response.Roles.Add(reader.GetString("ROLE_NAME"));
+                            }
+                        }
+                    }
+
+                    // Finally get permissions
+                    string permissionsQuery = @"
+                        SELECT DISTINCT p.PERMISSION_NAME
+                        FROM USER_ROLES ur
+                        JOIN ROLE_PERMISSIONS rp ON ur.ROLE_ID = rp.ROLE_ID
+                        JOIN PERMISSIONS p ON rp.PERMISSION_ID = p.PERMISSION_ID
+                        WHERE ur.USER_ID = @UserId";
+
+                    using (var cmd = new MySqlCommand(permissionsQuery, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@UserId", userId);
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                response.Permissions.Add(reader.GetString("PERMISSION_NAME"));
                             }
                         }
                     }
@@ -675,7 +722,7 @@ namespace BaseCode.Models
                 catch (Exception ex)
                 {
                     response.isSuccess = false;
-                    response.Message = $"Error retrieving customer profile: {ex.Message}";
+                    response.Message = $"Error retrieving user profile: {ex.Message}";
                     return response;
                 }
             }

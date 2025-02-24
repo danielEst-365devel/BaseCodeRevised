@@ -1,20 +1,21 @@
-﻿using System;
-using System.Linq;
-using System.Collections.Generic;
+﻿using BaseCode.Models;
+using BaseCode.Models.Requests.forCrudAct;
+using BaseCode.Models.Responses.forCrudAct;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Newtonsoft.Json.Linq;
-using System.Data;
-using System.Text;
-using BaseCode.Models.Requests.forCrudAct;
-using BaseCode.Models.Responses.forCrudAct;
-using BaseCode.Models;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+using MySql.Data.MySqlClient;
+using Newtonsoft.Json.Linq;
+using System;
+using System.Collections.Generic;
+using System.Data;
+using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
+using System.Security.Claims;
+using System.Text;
 
 namespace BaseCode.Controllers
 {
@@ -54,7 +55,7 @@ namespace BaseCode.Controllers
         }
 
         // START OF BASIC CRUD CONTROLLERS
-
+        [Authorize(Policy = "CanCreateUsers")]
         [HttpPost("CreateUser")]
         public IActionResult CreateUser([FromBody] CreateUserRequest r)
         {
@@ -68,6 +69,7 @@ namespace BaseCode.Controllers
                 return BadRequest(response);
         }
 
+        [Authorize(Policy = "CanViewActiveUsers")]
         [HttpGet("ActiveUsers")]
         public IActionResult GetActiveUsers()
         {
@@ -78,6 +80,7 @@ namespace BaseCode.Controllers
                 return BadRequest(response);
         }
 
+        [Authorize(Policy = "CanUpdateUserDetails")]
         [HttpPost("UpdateUserById")]
         public IActionResult UpdateUserById([FromBody] UpdateUserByIdRequest request)
         {
@@ -91,6 +94,7 @@ namespace BaseCode.Controllers
                 return BadRequest(response);
         }
 
+        [Authorize(Roles = "Admin")]
         [HttpPost("DeleteUser")]
         public IActionResult DeleteUser([FromBody] DeleteUserRequest request)
         {
@@ -105,58 +109,7 @@ namespace BaseCode.Controllers
         }
 
         // END OF BASIC CRUD CONTROLLERS
-
-        [HttpPost("Login")]
-        public IActionResult Login([FromBody] UserLoginRequest request)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
-
-            var response = db.LoginUserWithCookie(request);
-
-            if (response.isSuccess)
-            {
-                var jwtSettings = _configuration.GetSection("JwtSettings");
-                var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]);
-
-                var tokenHandler = new JwtSecurityTokenHandler();
-                var tokenDescriptor = new SecurityTokenDescriptor
-                {
-                    Subject = new ClaimsIdentity(new[]
-                    {
-                        new Claim(ClaimTypes.NameIdentifier, response.UserId.ToString()),
-                        new Claim(ClaimTypes.Email, response.Email),
-                        new Claim(ClaimTypes.GivenName, response.FirstName),
-                        new Claim(ClaimTypes.Surname, response.LastName)
-                    }),
-                    Expires = request.RememberMe ? DateTime.UtcNow.AddDays(14) : DateTime.UtcNow.AddDays(1),
-                    Issuer = jwtSettings["Issuer"],
-                    Audience = jwtSettings["Audience"],
-                    SigningCredentials = new SigningCredentials(
-                        new SymmetricSecurityKey(key),
-                        SecurityAlgorithms.HmacSha256Signature)
-                };
-
-                var token = tokenHandler.CreateToken(tokenDescriptor);
-                response.Token = tokenHandler.WriteToken(token);
-
-                // Set authentication cookie
-                var cookieOptions = new CookieOptions
-                {
-                    HttpOnly = true,
-                    Secure = true, // Enforce HTTPS in production
-                    SameSite = SameSiteMode.Strict,
-                    Expires = tokenDescriptor.Expires
-                };
-
-                Response.Cookies.Append("AuthToken", response.Token, cookieOptions);
-
-                return Ok(response);
-            }
-
-            return BadRequest(response);
-        }
-
+    
         [HttpPost("LoginWithHeader")]
         public IActionResult LoginWithHeader([FromBody] UserLoginRequest request)
         {
@@ -164,56 +117,58 @@ namespace BaseCode.Controllers
                 return BadRequest(ModelState);
 
             var response = db.LoginUser(request);
-
-            if (response.isSuccess)
-            {
-                var jwtSettings = _configuration.GetSection("JwtSettings");
-                var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]);
-                var tokenHandler = new JwtSecurityTokenHandler();
-                var tokenDescriptor = new SecurityTokenDescriptor
-                {
-                    Subject = new ClaimsIdentity(new[]
-                    {
-                new Claim(ClaimTypes.NameIdentifier, response.UserId.ToString()),
-                new Claim(ClaimTypes.Email, response.Email),
-                new Claim(ClaimTypes.GivenName, response.FirstName),
-                new Claim(ClaimTypes.Surname, response.LastName)
-            }),
-                    Expires = request.RememberMe ? DateTime.UtcNow.AddDays(14) : DateTime.UtcNow.AddDays(1),
-                    Issuer = jwtSettings["Issuer"],
-                    Audience = jwtSettings["Audience"],
-                    SigningCredentials = new SigningCredentials(
-                        new SymmetricSecurityKey(key),
-                        SecurityAlgorithms.HmacSha256Signature)
-                };
-
-                var token = tokenHandler.CreateToken(tokenDescriptor);
-                response.Token = tokenHandler.WriteToken(token);
-            }
-
             return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [HttpPost("Logout")]
+        public IActionResult Logout()
+        {
+            var jwt = Request.Headers["Authorization"].ToString().Substring("Bearer ".Length).Trim();
+            using (var conn = new MySqlConnection(_configuration.GetConnectionString("DefaultConnection")))
+            {
+                conn.Open();
+                using (var cmd = new MySqlCommand("DELETE FROM SESSIONS WHERE SESSION_ID = @SessionId", conn))
+                {
+                    cmd.Parameters.AddWithValue("@SessionId", jwt);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            return Ok("Logged out.");
         }
 
         // Add [Authorize] attribute to protected endpoints
         [Authorize]
-        [HttpGet("customer-profile")]
-        public IActionResult GetCustomerProfile()
+        [HttpGet("UserProfile")]
+        public IActionResult GetUserProfile()
         {
             try
             {
-                var customerIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(customerIdClaim))
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim))
                 {
                     return Unauthorized(new { Message = "Invalid token" });
                 }
 
-                int customerId = int.Parse(customerIdClaim);
-                var response = db.GetCustomerProfile(customerId);
+                int userId = int.Parse(userIdClaim);
+                var response = db.GetUserProfile(userId);
 
                 if (response.isSuccess)
+                {
+                    // Validate that we have the user's roles and permissions
+                    if (response.Roles == null || !response.Roles.Any())
+                    {
+                        response.Message += " (No roles assigned)";
+                    }
+                    if (response.Permissions == null || !response.Permissions.Any())
+                    {
+                        response.Message += " (No permissions assigned)";
+                    }
                     return Ok(response);
+                }
                 else
+                {
                     return BadRequest(response);
+                }
             }
             catch (Exception ex)
             {

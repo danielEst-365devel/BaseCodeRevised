@@ -1,4 +1,6 @@
 using BaseCode.Models;
+using Jose;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -7,10 +9,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using System;
+using System.Collections.Generic;
 using System.Text;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using Jose;
 
 namespace BaseCode
 {
@@ -21,63 +21,64 @@ namespace BaseCode
             Configuration = configuration;
         }
 
-        public IConfiguration Configuration { get; }
+        public IConfiguration Configuration { get; private set; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-
             var db_host = Environment.GetEnvironmentVariable("DB_HOST");
             var db_port = Environment.GetEnvironmentVariable("DB_PORT");
             var db_name = Environment.GetEnvironmentVariable("DB_NAME");
             var db_user = Environment.GetEnvironmentVariable("DB_USER");
             var db_password = Environment.GetEnvironmentVariable("DB_PASS");
 
-            var conn = "Server=" + db_host + ";Port=" + db_port + ";Database=" + db_name + ";Uid=" + db_user + ";Pwd=" + db_password + ";Convert Zero Datetime=True";
+            var conn = $"Server={db_host};Port={db_port};Database={db_name};Uid={db_user};Pwd={db_password};Convert Zero Datetime=True";
+
+            // Log the connection string for debugging purposes
+            Console.WriteLine($"Connection String: {conn}");
+
+            // Build a new configuration that includes the connection string under "DefaultConnection"
+            var connectionStringConfig = new Dictionary<string, string>
+                {
+                    { "ConnectionStrings:DefaultConnection", conn }
+                };
+
+            var configBuilder = new ConfigurationBuilder()
+                .AddConfiguration(Configuration)
+                .AddInMemoryCollection(connectionStringConfig);
+            Configuration = configBuilder.Build();
 
             // Existing DBContext registration
             services.Add(new ServiceDescriptor(typeof(DBContext), new DBContext(conn)));
-            services.Add(new ServiceDescriptor(typeof(DBCrudAct), new DBCrudAct(conn)));
-
-            // Add DBCrudAct registration TEST
-            // services.AddScoped<DBCrudAct>(provider => new DBCrudAct(conn));
+            // Update the DBCrudAct service registration to include the IConfiguration parameter
+            services.Add(new ServiceDescriptor(typeof(DBCrudAct), new DBCrudAct(conn, Configuration)));
+            
 
             services.AddMvc().AddJsonOptions(o =>
             {
                 o.JsonSerializerOptions.PropertyNamingPolicy = null;
                 o.JsonSerializerOptions.DictionaryKeyPolicy = null;
-
             });
             services.AddHttpContextAccessor();
 
-            // Add JWT Authentication REVIEWHIN
-            var jwtSettings = Configuration.GetSection("JwtSettings");
-            var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]);
+            // Add session-based authentication with JWT
+            services.AddAuthentication("SessionAuth")
+                .AddScheme<AuthenticationSchemeOptions, SessionAuthenticationHandler>("SessionAuth", null);
 
-            services.AddAuthentication(x =>
+            // Add authorization for RBAC
+            services.AddAuthorization(options =>
             {
-                x.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                x.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-            })
-            .AddJwtBearer(x =>
-            {
-                x.RequireHttpsMetadata = false;
-                x.SaveToken = true;
-                x.TokenValidationParameters = new TokenValidationParameters
-                {
-                    ValidateIssuerSigningKey = true,
-                    IssuerSigningKey = new SymmetricSecurityKey(key),
-                    ValidateIssuer = true,
-                    ValidateAudience = true,
-                    ValidIssuer = jwtSettings["Issuer"],
-                    ValidAudience = jwtSettings["Audience"]
-                };
+                options.AddPolicy("CanCreateUsers", policy =>
+                    policy.RequireClaim("permission", "CreateUser"));
+
+                options.AddPolicy("CanViewActiveUsers", policy =>
+                    policy.RequireClaim("permission", "ViewActiveUsers"));
+
+                options.AddPolicy("CanUpdateUserDetails", policy =>
+                    policy.RequireClaim("permission", "UpdateUserDetails"));
             });
-
-            // Add password reset JWT configuration
-            services.Configure<JwtSettings>(jwtSettings);
-            var resetKey = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]);
-            Environment.SetEnvironmentVariable("JWT_SECRET_KEY", jwtSettings["SecretKey"]);
+            // Ensure the updated IConfiguration is available
+            services.AddSingleton<IConfiguration>(Configuration);
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -93,16 +94,10 @@ namespace BaseCode
 
             using (var serviceScope = app.ApplicationServices.CreateScope())
             {
-                //GetSettingResponse list = new GetSettingResponse();
-                //var services = serviceScope.ServiceProvider;
-                //var dbcon = services.GetService<DBContext>();
-                //list = dbcon.GetSettingList("CORS");
-                //foreach (Settings value in list.settings)
-                //{
-
-                //    }
+                // Example scope usage; uncomment if needed
+                // var services = serviceScope.ServiceProvider;
+                // var dbcon = services.GetService<DBContext>();
             }
-
 
             app.UseHttpsRedirection();
 
