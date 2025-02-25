@@ -1083,6 +1083,243 @@ namespace BaseCode.Models
             return response;
         }
 
+        public GetRolesResponse GetRoles()
+        {
+            var response = new GetRolesResponse();
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    string sql = @"
+                        SELECT 
+                            r.ROLE_ID, r.ROLE_NAME, r.DESCRIPTION,
+                            p.PERMISSION_ID, p.PERMISSION_NAME, p.DESCRIPTION as PERMISSION_DESCRIPTION
+                        FROM ROLES r
+                        LEFT JOIN ROLE_PERMISSIONS rp ON r.ROLE_ID = rp.ROLE_ID
+                        LEFT JOIN PERMISSIONS p ON rp.PERMISSION_ID = p.PERMISSION_ID
+                        ORDER BY r.ROLE_ID";
+
+                    var roleDict = new Dictionary<int, Role>();
+
+                    using (var cmd = new MySqlCommand(sql, conn))
+                    using (var reader = cmd.ExecuteReader())
+                    {
+                        while (reader.Read())
+                        {
+                            int roleId = reader.GetInt32("ROLE_ID");
+                            
+                            if (!roleDict.ContainsKey(roleId))
+                            {
+                                roleDict[roleId] = new Role
+                                {
+                                    RoleId = roleId,
+                                    RoleName = reader.GetString("ROLE_NAME"),
+                                    Description = reader.IsDBNull(reader.GetOrdinal("DESCRIPTION")) 
+                                        ? null 
+                                        : reader.GetString("DESCRIPTION")
+                                };
+                            }
+
+                            if (!reader.IsDBNull(reader.GetOrdinal("PERMISSION_ID")))
+                            {
+                                roleDict[roleId].Permissions.Add(new RolePermission
+                                {
+                                    PermissionId = reader.GetInt32("PERMISSION_ID"),
+                                    PermissionName = reader.GetString("PERMISSION_NAME"),
+                                    Description = reader.IsDBNull(reader.GetOrdinal("PERMISSION_DESCRIPTION"))
+                                        ? null
+                                        : reader.GetString("PERMISSION_DESCRIPTION")
+                                });
+                            }
+                        }
+                    }
+
+                    response.Roles = roleDict.Values.ToList();
+                    response.isSuccess = true;
+                    response.Message = "Roles retrieved successfully";
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error retrieving roles: {ex.Message}";
+            }
+            return response;
+        }
+
+        public CreateRoleResponse CreateRole(CreateRoleRequest request)
+        {
+            var response = new CreateRoleResponse();
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            // Check if role name already exists
+                            using (var checkCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM ROLES WHERE ROLE_NAME = @RoleName",
+                                conn, transaction))
+                            {
+                                checkCmd.Parameters.AddWithValue("@RoleName", request.RoleName);
+                                int exists = Convert.ToInt32(checkCmd.ExecuteScalar());
+                                if (exists > 0)
+                                {
+                                    throw new Exception("Role name already exists");
+                                }
+                            }
+
+                            // Insert new role
+                            int roleId;
+                            using (var cmd = new MySqlCommand(
+                                "INSERT INTO ROLES (ROLE_NAME, DESCRIPTION) VALUES (@RoleName, @Description)",
+                                conn, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@RoleName", request.RoleName);
+                                cmd.Parameters.AddWithValue("@Description", 
+                                    string.IsNullOrEmpty(request.Description) ? DBNull.Value : request.Description);
+                                
+                                cmd.ExecuteNonQuery();
+                                roleId = (int)cmd.LastInsertedId;
+                            }
+
+                            // Add role permissions if any
+                            if (request.PermissionIds?.Any() == true)
+                            {
+                                using (var cmd = new MySqlCommand(
+                                    "INSERT INTO ROLE_PERMISSIONS (ROLE_ID, PERMISSION_ID) VALUES (@RoleId, @PermissionId)",
+                                    conn, transaction))
+                                {
+                                    foreach (int permissionId in request.PermissionIds)
+                                    {
+                                        cmd.Parameters.Clear();
+                                        cmd.Parameters.AddWithValue("@RoleId", roleId);
+                                        cmd.Parameters.AddWithValue("@PermissionId", permissionId);
+                                        cmd.ExecuteNonQuery();
+                                    }
+                                }
+                            }
+
+                            transaction.Commit();
+                            response.isSuccess = true;
+                            response.Message = "Role created successfully";
+                            response.RoleId = roleId;
+                            response.RoleName = request.RoleName;
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error creating role: {ex.Message}";
+            }
+            return response;
+        }
+
+        public UpdateRolePermissionsResponse UpdateRolePermissions(UpdateRolePermissionsRequest request)
+        {
+            var response = new UpdateRolePermissionsResponse();
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            // Verify role exists
+                            using (var checkCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM ROLES WHERE ROLE_ID = @RoleId",
+                                conn, transaction))
+                            {
+                                checkCmd.Parameters.AddWithValue("@RoleId", request.RoleId);
+                                int exists = Convert.ToInt32(checkCmd.ExecuteScalar());
+                                if (exists == 0)
+                                {
+                                    throw new Exception("Role not found");
+                                }
+                            }
+
+                            // Remove existing permissions
+                            using (var deleteCmd = new MySqlCommand(
+                                "DELETE FROM ROLE_PERMISSIONS WHERE ROLE_ID = @RoleId",
+                                conn, transaction))
+                            {
+                                deleteCmd.Parameters.AddWithValue("@RoleId", request.RoleId);
+                                deleteCmd.ExecuteNonQuery();
+                            }
+
+                            // Add new permissions
+                            using (var insertCmd = new MySqlCommand(
+                                "INSERT INTO ROLE_PERMISSIONS (ROLE_ID, PERMISSION_ID) VALUES (@RoleId, @PermissionId)",
+                                conn, transaction))
+                            {
+                                foreach (int permissionId in request.PermissionIds)
+                                {
+                                    insertCmd.Parameters.Clear();
+                                    insertCmd.Parameters.AddWithValue("@RoleId", request.RoleId);
+                                    insertCmd.Parameters.AddWithValue("@PermissionId", permissionId);
+                                    insertCmd.ExecuteNonQuery();
+                                }
+                            }
+
+                            // Get updated permissions for response
+                            using (var getCmd = new MySqlCommand(@"
+                                SELECT p.PERMISSION_ID, p.PERMISSION_NAME, p.DESCRIPTION
+                                FROM PERMISSIONS p
+                                JOIN ROLE_PERMISSIONS rp ON p.PERMISSION_ID = rp.PERMISSION_ID
+                                WHERE rp.ROLE_ID = @RoleId",
+                                conn, transaction))
+                            {
+                                getCmd.Parameters.AddWithValue("@RoleId", request.RoleId);
+                                using (var reader = getCmd.ExecuteReader())
+                                {
+                                    while (reader.Read())
+                                    {
+                                        response.UpdatedPermissions.Add(new RolePermission
+                                        {
+                                            PermissionId = reader.GetInt32("PERMISSION_ID"),
+                                            PermissionName = reader.GetString("PERMISSION_NAME"),
+                                            Description = reader.IsDBNull(reader.GetOrdinal("DESCRIPTION"))
+                                                ? null
+                                                : reader.GetString("DESCRIPTION")
+                                        });
+                                    }
+                                }
+                            }
+
+                            transaction.Commit();
+                            response.isSuccess = true;
+                            response.Message = "Role permissions updated successfully";
+                            response.RoleId = request.RoleId;
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error updating role permissions: {ex.Message}";
+            }
+            return response;
+        }
+
     }
 }
 

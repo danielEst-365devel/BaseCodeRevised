@@ -269,8 +269,34 @@ namespace BaseCode.Controllers
             }
         }
 
+        [Authorize(Roles = "Admin")]
+        [HttpGet("Roles")]
+        public IActionResult GetRoles()
+        {
+            var response = db.GetRoles();
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
 
-     
+        [Authorize(Roles = "Admin")]
+        [HttpPost("Roles")]
+        public IActionResult CreateRole([FromBody] CreateRoleRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
+            var response = db.CreateRole(request);
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("Roles/Permissions")]  // Changed from PUT to POST and simplified route
+        public IActionResult UpdateRolePermissions([FromBody] UpdateRolePermissionsRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = db.UpdateRolePermissions(request);
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
     }
 }
