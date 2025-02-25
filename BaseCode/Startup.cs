@@ -77,7 +77,9 @@ namespace BaseCode
                 options.AddPolicy("CanUpdateUserDetails", policy =>
                     policy.RequireClaim("permission", "UpdateUserDetails"));
             });
-            // Ensure the updated IConfiguration is available
+
+            services.AddHostedService<SessionExpirationService>(); // Register background service
+
             services.AddSingleton<IConfiguration>(Configuration);
         }
 

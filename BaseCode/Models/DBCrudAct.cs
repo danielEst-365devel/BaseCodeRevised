@@ -14,6 +14,7 @@ using System.Linq;
 using System.Reflection;
 using System.Security.Claims;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace BaseCode.Models
 {
@@ -44,6 +45,7 @@ namespace BaseCode.Models
                this._configuration = configuration;
            }
         */
+
 
         // START OF CRUD METHODS
         public CreateUserResponse CreateUser(CreateUserRequest r)
@@ -466,7 +468,6 @@ namespace BaseCode.Models
 
                                 if (accountStatus != "A")
                                 {
-                                    // 403 Forbidden response when account is inactive
                                     resp.isSuccess = false;
                                     resp.Message = "403 Forbidden: Account inactive";
                                     return resp;
@@ -497,60 +498,20 @@ namespace BaseCode.Models
                                         deleteCmd.ExecuteNonQuery();
                                     }
 
-                                    // Fetch roles
-                                    var roles = new List<string>();
-                                    using (var roleCmd = new MySqlCommand(
-                                        "SELECT r.ROLE_NAME FROM USER_ROLES ur " +
-                                        "JOIN ROLES r ON ur.ROLE_ID = r.ROLE_ID " +
-                                        "WHERE ur.USER_ID = @UserId", conn))
-                                    {
-                                        roleCmd.Parameters.AddWithValue("@UserId", userId);
-                                        using (var roleReader = roleCmd.ExecuteReader())
-                                        {
-                                            while (roleReader.Read())
-                                            {
-                                                roles.Add(roleReader["ROLE_NAME"].ToString());
-                                            }
-                                        }
-                                    }
-
-                                    // Fetch permissions
-                                    var permissions = new List<string>();
-                                    using (var permCmd = new MySqlCommand(
-                                        "SELECT p.PERMISSION_NAME FROM USER_ROLES ur " +
-                                        "JOIN ROLE_PERMISSIONS rp ON ur.ROLE_ID = rp.ROLE_ID " +
-                                        "JOIN PERMISSIONS p ON rp.PERMISSION_ID = p.PERMISSION_ID " +
-                                        "WHERE ur.USER_ID = @UserId", conn))
-                                    {
-                                        permCmd.Parameters.AddWithValue("@UserId", userId);
-                                        using (var permReader = permCmd.ExecuteReader())
-                                        {
-                                            while (permReader.Read())
-                                            {
-                                                permissions.Add(permReader["PERMISSION_NAME"].ToString());
-                                            }
-                                        }
-                                    }
-
-                                    // Generate JWT with roles and permissions
+                                    // Generate minimal JWT (no roles, permissions, or expiration in claims)
                                     var jwtSettings = GetJwtSettings();
                                     var key = Encoding.ASCII.GetBytes(jwtSettings["SecretKey"]);
                                     var tokenHandler = new JwtSecurityTokenHandler();
                                     var claims = new List<Claim>
                             {
                                 new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
-                                new Claim(ClaimTypes.Email, email),
-                                new Claim(ClaimTypes.GivenName, firstName),
-                                new Claim(ClaimTypes.Surname, lastName),
-                                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
+                                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()) // Unique ID
                             };
-                                    claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
-                                    claims.AddRange(permissions.Select(perm => new Claim("permission", perm)));
 
                                     var tokenDescriptor = new SecurityTokenDescriptor
                                     {
                                         Subject = new ClaimsIdentity(claims),
-                                        Expires = r.RememberMe ? DateTime.UtcNow.AddDays(14) : DateTime.UtcNow.AddDays(1),
+                                        // No Expires here; expiration managed by SESSIONS table
                                         Issuer = jwtSettings["Issuer"],
                                         Audience = jwtSettings["Audience"],
                                         SigningCredentials = new SigningCredentials(
@@ -561,14 +522,15 @@ namespace BaseCode.Models
                                     var token = tokenHandler.CreateToken(tokenDescriptor);
                                     string jwt = tokenHandler.WriteToken(token);
 
-                                    // Store JWT in SESSIONS
+                                    // Store JWT in SESSIONS with expiration
+                                    DateTime expiresAt = r.RememberMe ? DateTime.UtcNow.AddDays(14) : DateTime.UtcNow.AddDays(1);
                                     using (var sessionCmd = new MySqlCommand(
                                         "INSERT INTO SESSIONS (SESSION_ID, USER_ID, EXPIRES_AT) " +
                                         "VALUES (@SessionId, @UserId, @ExpiresAt)", conn))
                                     {
                                         sessionCmd.Parameters.AddWithValue("@SessionId", jwt);
                                         sessionCmd.Parameters.AddWithValue("@UserId", userId);
-                                        sessionCmd.Parameters.AddWithValue("@ExpiresAt", tokenDescriptor.Expires.Value);
+                                        sessionCmd.Parameters.AddWithValue("@ExpiresAt", expiresAt);
                                         sessionCmd.ExecuteNonQuery();
                                     }
 
@@ -589,14 +551,12 @@ namespace BaseCode.Models
                                         insertCmd.ExecuteNonQuery();
                                     }
 
-                                    // 401 Unauthorized response when password verification fails
                                     resp.isSuccess = false;
                                     resp.Message = "401 Unauthorized: Invalid password";
                                 }
                             }
                             else
                             {
-                                // 401 Unauthorized response when email not found
                                 resp.isSuccess = false;
                                 resp.Message = "401 Unauthorized: Email not found";
                             }
@@ -612,13 +572,11 @@ namespace BaseCode.Models
             return resp;
         }
 
-
         // Placeholder for JWT settings retrieval (adjust based on your setup)
         private IConfigurationSection GetJwtSettings()
         {
             return _configuration.GetSection("JwtSettings");
         }
-
 
         public UserProfileResponse GetUserProfile(int userId)
         {
@@ -957,8 +915,6 @@ namespace BaseCode.Models
             return new string(Enumerable.Repeat(chars, 8)
                 .Select(s => s[random.Next(s.Length)]).ToArray());
         }
-
-        // Only the modified methods are shown below.
 
         public ConfirmOtpResponse ConfirmOtp(ConfirmOtpRequest request)
         {
