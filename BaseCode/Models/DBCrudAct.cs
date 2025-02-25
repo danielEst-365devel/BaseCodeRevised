@@ -46,7 +46,7 @@ namespace BaseCode.Models
         */
 
         // START OF CRUD METHODS
-        public CreateUserResponse CreateCustomer(CreateUserRequest r)
+        public CreateUserResponse CreateUser(CreateUserRequest r)
         {
             CreateUserResponse resp = new CreateUserResponse();
             try
@@ -466,8 +466,9 @@ namespace BaseCode.Models
 
                                 if (accountStatus != "A")
                                 {
+                                    // 403 Forbidden response when account is inactive
                                     resp.isSuccess = false;
-                                    resp.Message = "Account inactive";
+                                    resp.Message = "403 Forbidden: Account inactive";
                                     return resp;
                                 }
 
@@ -480,7 +481,7 @@ namespace BaseCode.Models
                                     if (failedAttempts >= 5)
                                     {
                                         resp.isSuccess = false;
-                                        resp.Message = "Account locked due to too many failed login attempts";
+                                        resp.Message = "403 Forbidden: Account locked due to too many failed login attempts";
                                         return resp;
                                     }
                                 }
@@ -588,14 +589,16 @@ namespace BaseCode.Models
                                         insertCmd.ExecuteNonQuery();
                                     }
 
+                                    // 401 Unauthorized response when password verification fails
                                     resp.isSuccess = false;
-                                    resp.Message = "Invalid password";
+                                    resp.Message = "401 Unauthorized: Invalid password";
                                 }
                             }
                             else
                             {
+                                // 401 Unauthorized response when email not found
                                 resp.isSuccess = false;
-                                resp.Message = "Email not found";
+                                resp.Message = "401 Unauthorized: Email not found";
                             }
                         }
                     }

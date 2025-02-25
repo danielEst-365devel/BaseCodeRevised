@@ -62,7 +62,7 @@ namespace BaseCode.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var response = db.CreateCustomer(r);
+            var response = db.CreateUser(r);
             if (response.isSuccess)
                 return Ok(response);
             else
@@ -222,7 +222,16 @@ namespace BaseCode.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var response = db.ConfirmOtp(request); // Use the instance 'db' instead of 'DBCrudAct'
+            var response = db.ConfirmOtp(request);
+
+            if (!response.isSuccess)
+            {
+                if (response.Message.Contains("Invalid or expired OTP"))
+                    return BadRequest(response);
+                else
+                    return StatusCode(StatusCodes.Status500InternalServerError, response);
+            }
+
             return Ok(response);
         }
 
@@ -234,11 +243,30 @@ namespace BaseCode.Controllers
                 return BadRequest(ModelState);
 
             if (string.IsNullOrEmpty(authorization) || !authorization.StartsWith("Bearer "))
-                return Unauthorized(new { message = "Invalid token" });
+                return StatusCode(StatusCodes.Status401Unauthorized, new { message = "Invalid token format" });
 
-            string token = authorization.Substring("Bearer ".Length).Trim();
-            var response = db.ResetPassword(token, request); // Use the instance 'db' instead of 'DBCrudAct'
-            return Ok(response);
+            try
+            {
+                string token = authorization.Substring("Bearer ".Length).Trim();
+                var response = db.ResetPassword(token, request);
+
+                if (!response.isSuccess)
+                {
+                    if (response.Message.Contains("Invalid token"))
+                        return StatusCode(StatusCodes.Status401Unauthorized, response);
+                    else if (response.Message.Contains("User not found"))
+                        return StatusCode(StatusCodes.Status404NotFound, response);
+                    else
+                        return StatusCode(StatusCodes.Status400BadRequest, response);
+                }
+
+                return Ok(response);
+            }
+            catch (Exception)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    new { isSuccess = false, Message = "Internal server error during password reset" });
+            }
         }
 
 

@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -31,13 +32,13 @@ public class SessionAuthenticationHandler : AuthenticationHandler<Authentication
         if (!Request.Headers.TryGetValue("Authorization", out var authHeader) ||
             !authHeader.ToString().StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         {
-            return AuthenticateResult.NoResult();
+            return AuthenticateResult.Fail("Unauthorized: Missing or invalid Authorization header.");
         }
 
         var jwt = authHeader.ToString().Substring("Bearer ".Length).Trim();
         if (string.IsNullOrEmpty(jwt))
         {
-            return AuthenticateResult.Fail("No JWT provided.");
+            return AuthenticateResult.Fail("Unauthorized: No JWT provided.");
         }
 
         // Validate JWT signature
@@ -77,7 +78,7 @@ public class SessionAuthenticationHandler : AuthenticationHandler<Authentication
                             {
                                 reader.Close();
                                 await DeleteExpiredSession(conn, jwt);
-                                return AuthenticateResult.Fail("Session expired.");
+                                return AuthenticateResult.Fail("Unauthorized: Session expired.");
                             }
 
                             var identity = new ClaimsIdentity(principal.Claims, Scheme.Name);
@@ -86,7 +87,7 @@ public class SessionAuthenticationHandler : AuthenticationHandler<Authentication
                         }
                         else
                         {
-                            return AuthenticateResult.Fail("Invalid session.");
+                            return AuthenticateResult.Fail("Unauthorized: Invalid session.");
                         }
                     }
                 }
@@ -94,7 +95,7 @@ public class SessionAuthenticationHandler : AuthenticationHandler<Authentication
         }
         catch (SecurityTokenException)
         {
-            return AuthenticateResult.Fail("Invalid JWT.");
+            return AuthenticateResult.Fail("Unauthorized: Invalid JWT.");
         }
     }
 
@@ -105,5 +106,19 @@ public class SessionAuthenticationHandler : AuthenticationHandler<Authentication
             cmd.Parameters.AddWithValue("@SessionId", sessionId);
             await cmd.ExecuteNonQueryAsync();
         }
+    }
+
+    protected override async Task HandleChallengeAsync(AuthenticationProperties properties)
+    {
+        Response.StatusCode = StatusCodes.Status401Unauthorized;
+        Response.ContentType = "text/plain";
+        await Response.WriteAsync("401 Unauthorized: Access is denied due to missing or invalid credentials.");
+    }
+
+    protected override async Task HandleForbiddenAsync(AuthenticationProperties properties)
+    {
+        Response.StatusCode = StatusCodes.Status403Forbidden;
+        Response.ContentType = "text/plain";
+        await Response.WriteAsync("403 Forbidden: You do not have permission to access this resource.");
     }
 }
