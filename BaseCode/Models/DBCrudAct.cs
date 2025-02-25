@@ -3,6 +3,7 @@ using BaseCode.Models.Responses.forCrudAct;
 using BaseCode.Models.Tables;
 using BaseCode.Utils;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using MySql.Data.MySqlClient;
@@ -1319,6 +1320,263 @@ namespace BaseCode.Models
             }
             return response;
         }
+
+
+        public PermissionResponse CreatePermission(PermissionCreateRequest request)
+        {
+            var response = new PermissionResponse();
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            using (var cmd = new MySqlCommand(
+                                "INSERT INTO PERMISSIONS (PERMISSION_NAME, DESCRIPTION) " +
+                                "VALUES (@PermissionName, @Description); " +
+                                "SELECT LAST_INSERT_ID();", conn, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@PermissionName", request.PermissionName);
+                                cmd.Parameters.AddWithValue("@Description", string.IsNullOrEmpty(request.Description) ? (object)DBNull.Value : request.Description);
+
+                                int permissionId = Convert.ToInt32(cmd.ExecuteScalar());
+
+                                transaction.Commit();
+                                response.isSuccess = true;
+                                response.Message = "Permission created successfully";
+                                response.PermissionId = permissionId;
+                                response.PermissionName = request.PermissionName;
+                                response.Description = request.Description;
+                            }
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex) when (ex.Number == 1062) // Duplicate entry
+            {
+                response.isSuccess = false;
+                response.Message = "Error: Permission name already exists.";
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error creating permission: {ex.Message}";
+            }
+            return response;
+        }
+
+        public PermissionListResponse ViewAllPermissions()
+        {
+            var response = new PermissionListResponse();
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var cmd = new MySqlCommand(
+                        "SELECT PERMISSION_ID, PERMISSION_NAME, DESCRIPTION FROM PERMISSIONS", conn))
+                    {
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                response.Permissions.Add(new PermissionResponse
+                                {
+                                    isSuccess = true,
+                                    PermissionId = reader.GetInt32("PERMISSION_ID"),
+                                    PermissionName = reader.GetString("PERMISSION_NAME"),
+                                    Description = reader.IsDBNull(reader.GetOrdinal("DESCRIPTION")) ? null : reader.GetString("DESCRIPTION")
+                                });
+                            }
+                        }
+                        response.isSuccess = true;
+                        response.Message = "Permissions retrieved successfully";
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error retrieving permissions: {ex.Message}";
+            }
+            return response;
+        }
+
+        public PermissionResponse EditPermission(PermissionEditRequest request)
+        {
+            var response = new PermissionResponse();
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            using (var checkCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM PERMISSIONS WHERE PERMISSION_ID = @PermissionId", conn, transaction))
+                            {
+                                checkCmd.Parameters.AddWithValue("@PermissionId", request.PermissionId);
+                                int exists = Convert.ToInt32(checkCmd.ExecuteScalar());
+                                if (exists == 0)
+                                {
+                                    throw new Exception("Permission not found");
+                                }
+                            }
+
+                            using (var cmd = new MySqlCommand(
+                                "UPDATE PERMISSIONS SET PERMISSION_NAME = @PermissionName, DESCRIPTION = @Description " +
+                                "WHERE PERMISSION_ID = @PermissionId", conn, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@PermissionId", request.PermissionId);
+                                cmd.Parameters.AddWithValue("@PermissionName", request.PermissionName);
+                                cmd.Parameters.AddWithValue("@Description", string.IsNullOrEmpty(request.Description) ? (object)DBNull.Value : request.Description);
+
+                                int rowsAffected = cmd.ExecuteNonQuery();
+                                if (rowsAffected > 0)
+                                {
+                                    transaction.Commit();
+                                    response.isSuccess = true;
+                                    response.Message = "Permission updated successfully";
+                                    response.PermissionId = request.PermissionId;
+                                    response.PermissionName = request.PermissionName;
+                                    response.Description = request.Description;
+                                }
+                                else
+                                {
+                                    throw new Exception("Permission update failed");
+                                }
+                            }
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
+                    }
+                }
+            }
+            catch (MySqlException ex) when (ex.Number == 1062) // Duplicate entry
+            {
+                response.isSuccess = false;
+                response.Message = "Error: Permission name already exists.";
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error updating permission: {ex.Message}";
+            }
+            return response;
+        }
+
+        public AssignUserRoleResponse AssignRoleToUser(AssignUserRoleRequest request)
+        {
+            var response = new AssignUserRoleResponse();
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            // Verify user exists
+                            using (var userCheckCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM USERS WHERE USER_ID = @UserId",
+                                conn, transaction))
+                            {
+                                userCheckCmd.Parameters.AddWithValue("@UserId", request.UserId);
+                                int userExists = Convert.ToInt32(userCheckCmd.ExecuteScalar());
+                                if (userExists == 0)
+                                {
+                                    throw new Exception("User not found");
+                                }
+                            }
+
+                            // Verify role exists
+                            using (var roleCheckCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM ROLES WHERE ROLE_ID = @RoleId",
+                                conn, transaction))
+                            {
+                                roleCheckCmd.Parameters.AddWithValue("@RoleId", request.RoleId);
+                                int roleExists = Convert.ToInt32(roleCheckCmd.ExecuteScalar());
+                                if (roleExists == 0)
+                                {
+                                    throw new Exception("Role not found");
+                                }
+                            }
+
+                            // Check if role is already assigned (optional, to avoid duplicates)
+                            using (var checkExistingCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM USER_ROLES WHERE USER_ID = @UserId AND ROLE_ID = @RoleId",
+                                conn, transaction))
+                            {
+                                checkExistingCmd.Parameters.AddWithValue("@UserId", request.UserId);
+                                checkExistingCmd.Parameters.AddWithValue("@RoleId", request.RoleId);
+                                int alreadyAssigned = Convert.ToInt32(checkExistingCmd.ExecuteScalar());
+                                if (alreadyAssigned > 0)
+                                {
+                                    throw new Exception("Role is already assigned to this user");
+                                }
+                            }
+
+                            // Assign role to user
+                            using (var cmd = new MySqlCommand(
+                                "INSERT INTO USER_ROLES (USER_ID, ROLE_ID) VALUES (@UserId, @RoleId)",
+                                conn, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@UserId", request.UserId);
+                                cmd.Parameters.AddWithValue("@RoleId", request.RoleId);
+                                cmd.ExecuteNonQuery();
+                            }
+
+                            // Get role name for response
+                            using (var getRoleCmd = new MySqlCommand(
+                                "SELECT ROLE_NAME FROM ROLES WHERE ROLE_ID = @RoleId",
+                                conn, transaction))
+                            {
+                                getRoleCmd.Parameters.AddWithValue("@RoleId", request.RoleId);
+                                using (var reader = getRoleCmd.ExecuteReader())
+                                {
+                                    if (reader.Read())
+                                    {
+                                        response.RoleName = reader.GetString("ROLE_NAME");
+                                    }
+                                }
+                            }
+
+                            transaction.Commit();
+                            response.isSuccess = true;
+                            response.Message = "Role assigned to user successfully";
+                            response.UserId = request.UserId;
+                            response.RoleId = request.RoleId;
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error assigning role to user: {ex.Message}";
+            }
+            return response;
+        }
+
 
     }
 }

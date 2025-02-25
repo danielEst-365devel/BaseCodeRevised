@@ -16,6 +16,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace BaseCode.Controllers
 {
@@ -298,5 +299,52 @@ namespace BaseCode.Controllers
             var response = db.UpdateRolePermissions(request);
             return response.isSuccess ? Ok(response) : BadRequest(response);
         }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("CreatePermissions")]
+        public IActionResult CreatePermission([FromBody] PermissionCreateRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = db.CreatePermission(request);
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("ViewAllPermissions")]
+        public IActionResult ViewAllPermissions()
+        {
+            var response = db.ViewAllPermissions();
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("EditPermissions")]
+        public IActionResult EditPermission([FromBody] PermissionEditRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = db.EditPermission(request);
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
+
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("AssignUserRole")]
+        public ObjectResult AssignUserRole([FromBody] AssignUserRoleRequest request)
+        {
+            if (!ModelState.IsValid)
+                return new BadRequestObjectResult(ModelState);
+
+            var response = db.AssignRoleToUser(request);
+            return response.isSuccess
+                ? new OkObjectResult(response)
+                : new BadRequestObjectResult(response);
+        }
+
+
+
     }
 }
