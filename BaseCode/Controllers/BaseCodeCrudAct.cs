@@ -202,7 +202,7 @@ namespace BaseCode.Controllers
             }
         }
 
-        [HttpPost("forget-password")]
+        [HttpPost("ForgetPassword")]
         public IActionResult ForgetPassword([FromBody] ForgetPasswordRequest request)
         {
             if (!ModelState.IsValid)
@@ -216,7 +216,7 @@ namespace BaseCode.Controllers
                 return BadRequest(response);
         }
 
-        [HttpPost("confirm-otp")]
+        [HttpPost("ConfirmOTP")]
         public IActionResult ConfirmOtp([FromBody] ConfirmOtpRequest request)
         {
             if (!ModelState.IsValid)
@@ -227,7 +227,7 @@ namespace BaseCode.Controllers
         }
 
 
-        [HttpPost("reset-password")]
+        [HttpPost("ResetPassword")]
         public IActionResult ResetPassword([FromHeader(Name = "Authorization")] string authorization, [FromBody] ResetPasswordRequest request)
         {
             if (!ModelState.IsValid)

@@ -837,7 +837,6 @@ namespace BaseCode.Models
         }
 
 
-        // Add this method to the DBCrudAct class
         public ForgetPasswordResponse RequestPasswordReset(ForgetPasswordRequest request)
         {
             var response = new ForgetPasswordResponse();
@@ -850,12 +849,15 @@ namespace BaseCode.Models
                     {
                         try
                         {
-                            // Check if email exists and get customer details
+                            // Check if email exists and get user details
                             var checkCmd = new MySqlCommand(
-                                "SELECT CUSTOMERID, PHONENUMBER, ACCOUNT_STATUS FROM CUSTOMERS WHERE EMAIL = @Email",
+                                "SELECT USER_ID, PHONE_NUMBER, ACCOUNT_STATUS FROM USERS WHERE EMAIL = @Email",
                                 conn, transaction);
                             checkCmd.Parameters.AddWithValue("@Email", request.Email);
 
+                            int userId;
+                            string phoneNumber;
+                            string accountStatus;
                             using (var reader = checkCmd.ExecuteReader())
                             {
                                 if (!reader.Read())
@@ -864,74 +866,75 @@ namespace BaseCode.Models
                                     response.Message = "Email not found";
                                     return response;
                                 }
-
-                                int customerId = reader.GetInt32("CUSTOMERID");
-                                string phoneNumber = reader.GetString("PHONENUMBER");
-                                string accountStatus = reader.GetString("ACCOUNT_STATUS");
-
-                                if (accountStatus != "A")
-                                {
-                                    response.isSuccess = false;
-                                    response.Message = "Account is inactive";
-                                    return response;
-                                }
-
-                                if (string.IsNullOrEmpty(phoneNumber))
-                                {
-                                    response.isSuccess = false;
-                                    response.Message = "No phone number associated with this account";
-                                    return response;
-                                }
-
-                                reader.Close();
-
-                                // First, expire OTPs that are older than 1 minute
-                                var expireOldOtpsCmd = new MySqlCommand(@"
-                                    UPDATE CUSTOMERS_OTP_CRUD 
-                                    SET STATUS = 'E' 
-                                    WHERE CUSTOMERID = @CustomerId 
-                                    AND STATUS = 'A'
-                                    AND TIMESTAMPDIFF(MINUTE, CREATED_AT, NOW()) >= 1",
-                                    conn, transaction);
-                                expireOldOtpsCmd.Parameters.AddWithValue("@CustomerId", customerId);
-                                expireOldOtpsCmd.ExecuteNonQuery();
-
-                                // Generate OTP
-                                string otp = GenerateOtp();
-                                DateTime now = DateTime.Now;
-
-                                // Expire any remaining active OTPs
-                                var expireCmd = new MySqlCommand(
-                                    "UPDATE CUSTOMERS_OTP_CRUD SET STATUS = 'E' WHERE CUSTOMERID = @CustomerId AND STATUS = 'A'",
-                                    conn, transaction);
-                                expireCmd.Parameters.AddWithValue("@CustomerId", customerId);
-                                expireCmd.ExecuteNonQuery();
-
-                                // Insert new OTP
-                                var insertCmd = new MySqlCommand(
-                                    "INSERT INTO CUSTOMERS_OTP_CRUD (CUSTOMERID, OTP, STATUS, CREATED_AT) VALUES (@CustomerId, @Otp, 'A', @CreatedAt)",
-                                    conn, transaction);
-                                insertCmd.Parameters.AddWithValue("@CustomerId", customerId);
-                                insertCmd.Parameters.AddWithValue("@Otp", otp);
-                                insertCmd.Parameters.AddWithValue("@CreatedAt", now);
-                                insertCmd.ExecuteNonQuery();
-
-                                // Send OTP via Twilio
-                                bool smsSent = TwilioService.SendSms(phoneNumber, $"Your password reset OTP is: {otp}");
-                                if (!smsSent)
-                                {
-                                    throw new Exception("Failed to send SMS");
-                                }
-
-                                transaction.Commit();
-                                response.isSuccess = true;
-                                response.Message = "OTP sent successfully";
+                                userId = reader.GetInt32("USER_ID");
+                                phoneNumber = reader.GetString("PHONE_NUMBER");
+                                accountStatus = reader.GetString("ACCOUNT_STATUS");
                             }
+
+                            if (accountStatus != "A")
+                            {
+                                response.isSuccess = false;
+                                response.Message = "Account is inactive";
+                                return response;
+                            }
+
+                            if (string.IsNullOrEmpty(phoneNumber))
+                            {
+                                response.isSuccess = false;
+                                response.Message = "No phone number associated with this account";
+                                return response;
+                            }
+
+                            // Expire OTPs that are older than 1 minute
+                            var expireOldOtpsCmd = new MySqlCommand(@"
+                                UPDATE USERS_OTP 
+                                SET STATUS = 'E' 
+                                WHERE USER_ID = @UserId 
+                                  AND STATUS = 'A'
+                                  AND TIMESTAMPDIFF(MINUTE, CREATED_AT, NOW()) >= 1",
+                                conn, transaction);
+                            expireOldOtpsCmd.Parameters.AddWithValue("@UserId", userId);
+                            expireOldOtpsCmd.ExecuteNonQuery();
+
+                            // Generate OTP and set expiry date (e.g., 5 minutes from now)
+                            string otp = GenerateOtp();
+                            DateTime now = DateTime.Now;
+                            DateTime expiryDate = now.AddMinutes(5);
+
+                            // Expire any remaining active OTPs
+                            var expireCmd = new MySqlCommand(
+                                "UPDATE USERS_OTP SET STATUS = 'E' WHERE USER_ID = @UserId AND STATUS = 'A'",
+                                conn, transaction);
+                            expireCmd.Parameters.AddWithValue("@UserId", userId);
+                            expireCmd.ExecuteNonQuery();
+
+                            // Insert new OTP record
+                            var insertCmd = new MySqlCommand(
+                                "INSERT INTO USERS_OTP (USER_ID, OTP, STATUS, CREATED_AT, EXPIRY_DATE) " +
+                                "VALUES (@UserId, @Otp, 'A', @CreatedAt, @ExpiryDate)",
+                                conn, transaction);
+                            insertCmd.Parameters.AddWithValue("@UserId", userId);
+                            insertCmd.Parameters.AddWithValue("@Otp", otp);
+                            insertCmd.Parameters.AddWithValue("@CreatedAt", now);
+                            insertCmd.Parameters.AddWithValue("@ExpiryDate", expiryDate);
+                            insertCmd.ExecuteNonQuery();
+
+                            // Send OTP via Twilio
+                            bool smsSent = TwilioService.SendSms(phoneNumber, $"Your password reset OTP is: {otp}. Valid for 1 minute.");
+                            if (!smsSent)
+                            {
+                                throw new Exception("Failed to send SMS");
+                            }
+
+                            transaction.Commit();
+                            response.isSuccess = true;
+                            response.Message = "OTP sent successfully";
                         }
-                        catch (Exception)
+                        catch (Exception ex)
                         {
                             transaction.Rollback();
-                            throw;
+                            response.isSuccess = false;
+                            response.Message = $"Password reset request failed: {ex.Message}";
                         }
                     }
                 }
@@ -952,7 +955,7 @@ namespace BaseCode.Models
                 .Select(s => s[random.Next(s.Length)]).ToArray());
         }
 
-        // Add these methods to the DBCrudAct class
+        // Only the modified methods are shown below.
 
         public ConfirmOtpResponse ConfirmOtp(ConfirmOtpRequest request)
         {
@@ -966,15 +969,14 @@ namespace BaseCode.Models
                     {
                         try
                         {
-                            // Get customer ID and verify OTP
                             var checkCmd = new MySqlCommand(@"
-                                SELECT c.CUSTOMERID, c.EMAIL, o.OTP_ID 
-                                FROM CUSTOMERS c
-                                JOIN CUSTOMERS_OTP_CRUD o ON c.CUSTOMERID = o.CUSTOMERID
-                                WHERE c.EMAIL = @Email 
-                                AND o.OTP = @Otp
-                                AND o.STATUS = 'A'
-                                AND TIMESTAMPDIFF(MINUTE, o.CREATED_AT, NOW()) < 1",
+                                SELECT u.USER_ID, u.EMAIL, o.OTP_ID 
+                                FROM USERS u
+                                JOIN USERS_OTP o ON u.USER_ID = o.USER_ID
+                                WHERE u.EMAIL = @Email 
+                                  AND o.OTP = @Otp
+                                  AND o.STATUS = 'A'
+                                  AND TIMESTAMPDIFF(MINUTE, o.CREATED_AT, NOW()) < 1",
                                 conn, transaction);
 
                             checkCmd.Parameters.AddWithValue("@Email", request.Email);
@@ -989,26 +991,30 @@ namespace BaseCode.Models
                                     return response;
                                 }
 
-                                int customerId = reader.GetInt32("CUSTOMERID");
+                                int userId = reader.GetInt32("USER_ID");
                                 int otpId = reader.GetInt32("OTP_ID");
                                 string email = reader.GetString("EMAIL");
                                 reader.Close();
 
                                 // Mark OTP as used
                                 var updateCmd = new MySqlCommand(
-                                    "UPDATE CUSTOMERS_OTP_CRUD SET STATUS = 'U' WHERE OTP_ID = @OtpId",
+                                    "UPDATE USERS_OTP SET STATUS = 'U' WHERE OTP_ID = @OtpId",
                                     conn, transaction);
                                 updateCmd.Parameters.AddWithValue("@OtpId", otpId);
                                 updateCmd.ExecuteNonQuery();
 
-                                // Generate JWT token
+                                // Retrieve the JWT secret key and check for null/empty
+                                var jwtSecret = Environment.GetEnvironmentVariable("JWT_SECRET_KEY");
+                                if (string.IsNullOrEmpty(jwtSecret))
+                                    throw new Exception("JWT_SECRET_KEY environment variable is not set.");
+
                                 var tokenHandler = new JwtSecurityTokenHandler();
-                                var key = Encoding.ASCII.GetBytes(Environment.GetEnvironmentVariable("JWT_SECRET_KEY"));
+                                var key = Encoding.ASCII.GetBytes(jwtSecret);
                                 var tokenDescriptor = new SecurityTokenDescriptor
                                 {
                                     Subject = new ClaimsIdentity(new[]
                                     {
-                                        new Claim(ClaimTypes.NameIdentifier, customerId.ToString()),
+                                        new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
                                         new Claim(ClaimTypes.Email, email),
                                         new Claim("purpose", "password_reset")
                                     }),
@@ -1049,7 +1055,7 @@ namespace BaseCode.Models
             {
                 var tokenHandler = new JwtSecurityTokenHandler();
                 var key = Encoding.ASCII.GetBytes(Environment.GetEnvironmentVariable("JWT_SECRET_KEY"));
-                
+
                 var tokenValidationParameters = new TokenValidationParameters
                 {
                     ValidateIssuerSigningKey = true,
@@ -1062,7 +1068,7 @@ namespace BaseCode.Models
                 SecurityToken validatedToken;
                 var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out validatedToken);
 
-                var customerId = int.Parse(principal.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+                var userId = int.Parse(principal.FindFirst(ClaimTypes.NameIdentifier)?.Value);
                 var purpose = principal.FindFirst("purpose")?.Value;
 
                 if (purpose != "password_reset")
@@ -1079,24 +1085,23 @@ namespace BaseCode.Models
                         {
                             string hashedPassword = PasswordHasher.HashPassword(request.NewPassword);
 
-                            // Update password
+                            // Update password in USERS table
                             var updateCmd = new MySqlCommand(
-                                "UPDATE CUSTOMERS SET PASSWORD = @Password WHERE CUSTOMERID = @CustomerId",
+                                "UPDATE USERS SET PASSWORD = @Password WHERE USER_ID = @UserId",
                                 conn, transaction);
                             updateCmd.Parameters.AddWithValue("@Password", hashedPassword);
-                            updateCmd.Parameters.AddWithValue("@CustomerId", customerId);
-                            
+                            updateCmd.Parameters.AddWithValue("@UserId", userId);
+
                             int rowsAffected = updateCmd.ExecuteNonQuery();
                             if (rowsAffected == 0)
                             {
-                                throw new Exception("Customer not found");
+                                throw new Exception("User not found");
                             }
-
-                            // Clear failed login attempts to remove the lockout
+                                                     
                             var clearFailedLoginsCmd = new MySqlCommand(
-                                "DELETE FROM FAILED_LOGINS WHERE CUSTOMERID = @CustomerId",
+                                "DELETE FROM FAILED_LOGINS WHERE USER_ID = @UserId",
                                 conn, transaction);
-                            clearFailedLoginsCmd.Parameters.AddWithValue("@CustomerId", customerId);
+                            clearFailedLoginsCmd.Parameters.AddWithValue("@UserId", userId);
                             clearFailedLoginsCmd.ExecuteNonQuery();
 
                             transaction.Commit();
