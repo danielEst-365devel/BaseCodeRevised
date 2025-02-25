@@ -728,8 +728,7 @@ namespace BaseCode.Models
             }
         }
 
-        // Add this new method to the DBCrudAct class
-        public UpdateUserResponse UpdateCustomer(int userId, UpdateUserRequest r)
+        public UpdateUserResponse UpdateUser(int userId, UpdateUserRequest r)
         {
             var response = new UpdateUserResponse();
             try
@@ -741,22 +740,37 @@ namespace BaseCode.Models
                     {
                         try
                         {
-                            string updateCustomerQuery = @"
-                                UPDATE CUSTOMERS 
-                                SET FIRSTNAME = @FirstName,
-                                    LASTNAME = @LastName,
+                            // Check if username is already taken by another user
+                            using (var checkCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM USERS WHERE USER_NAME = @UserName AND USER_ID != @UserId",
+                                conn, transaction))
+                            {
+                                checkCmd.Parameters.AddWithValue("@UserName", r.UserName);
+                                checkCmd.Parameters.AddWithValue("@UserId", userId);
+                                int usernameExists = Convert.ToInt32(checkCmd.ExecuteScalar());
+                                if (usernameExists > 0)
+                                {
+                                    throw new Exception("Username is already taken");
+                                }
+                            }
+
+                            string updateUserQuery = @"
+                                UPDATE USERS
+                                SET USER_NAME = @UserName,
+                                    FIRST_NAME = @FirstName,
+                                    LAST_NAME = @LastName,
                                     EMAIL = @Email,
-                                    PHONENUMBER = @PhoneNumber,
-                                    AGE = @Age,
+                                    PHONE_NUMBER = @PhoneNumber,
                                     BIRTHDAY = @Birthday,
                                     CIVIL_STATUS = @CivilStatus,
                                     UPDATEDATE = @UpdateDate
-                                WHERE CUSTOMERID = @CustomerId";
+                                WHERE USER_ID = @UserId";
 
-                            using (var cmd = new MySqlCommand(updateCustomerQuery, conn, transaction))
+                            using (var cmd = new MySqlCommand(updateUserQuery, conn, transaction))
                             {
                                 DateTime now = DateTime.Now;
-                                cmd.Parameters.AddWithValue("@CustomerId", userId);
+                                cmd.Parameters.AddWithValue("@UserId", userId);
+                                cmd.Parameters.AddWithValue("@UserName", r.UserName);
                                 cmd.Parameters.AddWithValue("@FirstName", r.FirstName);
                                 cmd.Parameters.AddWithValue("@LastName", r.LastName);
                                 cmd.Parameters.AddWithValue("@Email", r.Email);
@@ -767,18 +781,16 @@ namespace BaseCode.Models
 
                                 int rowsAffected = cmd.ExecuteNonQuery();
                                 if (rowsAffected == 0)
-                                {
-                                    throw new Exception("Customer not found");
-                                }
+                                    throw new Exception("User not found");
 
                                 // Update address if provided
                                 if (r.Address != null)
                                 {
                                     string addressQuery = @"
-                                        INSERT INTO CUSTOMER_ADDRESSES 
-                                            (CUSTOMERID, STREET, CITY, STATE, ZIPCODE, COUNTRY, CREATEDATE)
+                                        INSERT INTO USER_ADDRESSES 
+                                            (USER_ID, STREET, CITY, STATE, ZIPCODE, COUNTRY, CREATEDATE)
                                         VALUES 
-                                            (@CustomerId, @Street, @City, @State, @ZipCode, @Country, @CreateDate)
+                                            (@UserId, @Street, @City, @State, @ZipCode, @Country, @CreateDate)
                                         ON DUPLICATE KEY UPDATE
                                             STREET = @Street,
                                             CITY = @City,
@@ -789,7 +801,7 @@ namespace BaseCode.Models
 
                                     using (var addrCmd = new MySqlCommand(addressQuery, conn, transaction))
                                     {
-                                        addrCmd.Parameters.AddWithValue("@CustomerId", userId);
+                                        addrCmd.Parameters.AddWithValue("@UserId", userId);
                                         addrCmd.Parameters.AddWithValue("@Street", r.Address.Street);
                                         addrCmd.Parameters.AddWithValue("@City", r.Address.City);
                                         addrCmd.Parameters.AddWithValue("@State", r.Address.State);
@@ -803,7 +815,7 @@ namespace BaseCode.Models
 
                                 transaction.Commit();
                                 response.isSuccess = true;
-                                response.Message = "Customer updated successfully";
+                                response.Message = "User updated successfully";
                                 response.UserId = userId;
                                 response.UpdateDate = now;
                             }
@@ -819,12 +831,11 @@ namespace BaseCode.Models
             catch (Exception ex)
             {
                 response.isSuccess = false;
-                response.Message = $"Error updating customer: {ex.Message}";
+                response.Message = $"Error updating user: {ex.Message}";
             }
             return response;
         }
 
-       
 
         // Add this method to the DBCrudAct class
         public ForgetPasswordResponse RequestPasswordReset(ForgetPasswordRequest request)

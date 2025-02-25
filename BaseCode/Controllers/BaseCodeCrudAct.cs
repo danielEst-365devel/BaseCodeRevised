@@ -176,31 +176,31 @@ namespace BaseCode.Controllers
             }
         }
 
-        //[Authorize]
-        //[HttpPut("update-profile")]
-        //public IActionResult UpdateCustomerProfile([FromBody] UpdateUserRequest request)
-        //{
-        //    try
-        //    {
-        //        var customerIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-        //        if (string.IsNullOrEmpty(customerIdClaim))
-        //        {
-        //            return Unauthorized(new { Message = "Invalid token" });
-        //        }
+        [Authorize]
+        [HttpPut("UpdateProfile")]
+        public IActionResult UpdateUserProfile([FromBody] UpdateUserRequest request)
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim))
+                {
+                    return Unauthorized(new { Message = "Invalid token" });
+                }
 
-        //        int customerId = int.Parse(customerIdClaim);
-        //        var response = db.UpdateCustomer(customerId, request);
+                int userId = int.Parse(userIdClaim);
+                var response = db.UpdateUser(userId, request);
 
-        //        if (response.isSuccess)
-        //            return Ok(response);
-        //        else
-        //            return BadRequest(response);
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        return BadRequest(new { isSuccess = false, Message = "Error updating profile: " + ex.Message });
-        //    }
-        //}
+                if (response.isSuccess)
+                    return Ok(response);
+                else
+                    return BadRequest(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { isSuccess = false, Message = "Error updating user profile: " + ex.Message });
+            }
+        }
 
         [HttpPost("forget-password")]
         public IActionResult ForgetPassword([FromBody] ForgetPasswordRequest request)
