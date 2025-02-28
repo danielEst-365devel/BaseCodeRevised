@@ -1057,7 +1057,7 @@ namespace BaseCode.Models
                             {
                                 throw new Exception("User not found");
                             }
-                                                     
+
                             var clearFailedLoginsCmd = new MySqlCommand(
                                 "DELETE FROM FAILED_LOGINS WHERE USER_ID = @UserId",
                                 conn, transaction);
@@ -1109,15 +1109,15 @@ namespace BaseCode.Models
                         while (reader.Read())
                         {
                             int roleId = reader.GetInt32("ROLE_ID");
-                            
+
                             if (!roleDict.ContainsKey(roleId))
                             {
                                 roleDict[roleId] = new Role
                                 {
                                     RoleId = roleId,
                                     RoleName = reader.GetString("ROLE_NAME"),
-                                    Description = reader.IsDBNull(reader.GetOrdinal("DESCRIPTION")) 
-                                        ? null 
+                                    Description = reader.IsDBNull(reader.GetOrdinal("DESCRIPTION"))
+                                        ? null
                                         : reader.GetString("DESCRIPTION")
                                 };
                             }
@@ -1181,9 +1181,9 @@ namespace BaseCode.Models
                                 conn, transaction))
                             {
                                 cmd.Parameters.AddWithValue("@RoleName", request.RoleName);
-                                cmd.Parameters.AddWithValue("@Description", 
+                                cmd.Parameters.AddWithValue("@Description",
                                     string.IsNullOrEmpty(request.Description) ? DBNull.Value : request.Description);
-                                
+
                                 cmd.ExecuteNonQuery();
                                 roleId = (int)cmd.LastInsertedId;
                             }
@@ -1577,8 +1577,837 @@ namespace BaseCode.Models
             return response;
         }
 
+        // New API methods
+        public GetUsersByRoleResponse GetUsersByRole(string roleName)
+        {
+            var response = new GetUsersByRoleResponse
+            {
+                Users = new List<UserDetail>()
+            };
 
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+
+                    // First, get all users that have the specified role
+                    string sql = @"
+                        SELECT DISTINCT u.USER_ID
+                        FROM USERS u
+                        JOIN USER_ROLES ur ON u.USER_ID = ur.USER_ID
+                        JOIN ROLES r ON ur.ROLE_ID = r.ROLE_ID
+                        WHERE r.ROLE_NAME = @RoleName";
+
+                    List<int> userIds = new List<int>();
+                    using (var cmd = new MySqlCommand(sql, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@RoleName", roleName);
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                userIds.Add(reader.GetInt32("USER_ID"));
+                            }
+                        }
+                    }
+
+                    if (userIds.Count == 0)
+                    {
+                        response.isSuccess = true;
+                        response.Message = $"No users found with role '{roleName}'.";
+                        return response;
+                    }
+
+                    // Now get full user details including ALL roles for these users
+                    sql = @"
+                        SELECT 
+                            u.USER_ID, u.USER_NAME, u.FIRST_NAME, u.LAST_NAME, u.EMAIL, u.PHONE_NUMBER,
+                            u.AGE, u.BIRTHDAY, u.CIVIL_STATUS, u.ACCOUNT_STATUS, u.CREATEDATE, u.UPDATEDATE,
+                            ua.STREET, ua.CITY, ua.STATE, ua.ZIPCODE, ua.COUNTRY,
+                            r.ROLE_NAME
+                        FROM USERS u
+                        LEFT JOIN USER_ADDRESSES ua ON u.USER_ID = ua.USER_ID
+                        LEFT JOIN USER_ROLES ur ON u.USER_ID = ur.USER_ID
+                        LEFT JOIN ROLES r ON ur.ROLE_ID = r.ROLE_ID
+                        WHERE u.USER_ID IN (" + string.Join(",", userIds) + @")
+                        ORDER BY u.USER_ID";
+
+                    using (var cmd = new MySqlCommand(sql, conn))
+                    {
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            var userDict = new Dictionary<int, UserDetail>();
+
+                            while (reader.Read())
+                            {
+                                int userId = reader.GetInt32("USER_ID");
+
+                                if (!userDict.ContainsKey(userId))
+                                {
+                                    var user = new UserDetail
+                                    {
+                                        UserId = userId,
+                                        UserName = reader.GetString("USER_NAME"),
+                                        FirstName = reader.GetString("FIRST_NAME"),
+                                        LastName = reader.GetString("LAST_NAME"),
+                                        Email = reader.GetString("EMAIL"),
+                                        PhoneNumber = reader.IsDBNull(reader.GetOrdinal("PHONE_NUMBER")) ? null : reader.GetString("PHONE_NUMBER"),
+                                        Age = reader.GetInt32("AGE"),
+                                        Birthday = reader.GetDateTime("BIRTHDAY"),
+                                        CivilStatus = reader.GetString("CIVIL_STATUS"),
+                                        AccountStatus = reader.GetString("ACCOUNT_STATUS"),
+                                        CreateDate = reader.GetDateTime("CREATEDATE"),
+                                        UpdateDate = reader.IsDBNull(reader.GetOrdinal("UPDATEDATE")) ? (DateTime?)null : reader.GetDateTime("UPDATEDATE"),
+                                        Address = !reader.IsDBNull(reader.GetOrdinal("STREET")) ? new UserAddress
+                                        {
+                                            Street = reader.GetString("STREET"),
+                                            City = reader.GetString("CITY"),
+                                            State = reader.GetString("STATE"),
+                                            ZipCode = reader.GetString("ZIPCODE"),
+                                            Country = reader.GetString("COUNTRY")
+                                        } : null
+                                    };
+
+                                    userDict.Add(userId, user);
+                                }
+
+                                // Add the role if it exists and isn't already in the list
+                                if (!reader.IsDBNull(reader.GetOrdinal("ROLE_NAME")))
+                                {
+                                    string currentRole = reader.GetString("ROLE_NAME");
+                                    if (!userDict[userId].Roles.Contains(currentRole))
+                                    {
+                                        userDict[userId].Roles.Add(currentRole);
+                                    }
+                                }
+                            }
+
+                            response.Users = userDict.Values.ToList();
+                        }
+                    }
+                }
+
+                response.isSuccess = true;
+                response.Message = $"Retrieved users with role '{roleName}' (showing all assigned roles).";
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error retrieving users: {ex.Message}";
+            }
+
+            return response;
+        }
+
+        public GetUsersByRoleResponse SearchUsers(string searchTerm, string accountStatus = null)
+        {
+            var response = new GetUsersByRoleResponse
+            {
+                Users = new List<UserDetail>()
+            };
+
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+
+                    // First, check if we need to create FULLTEXT indexes
+                    EnsureFullTextIndexes(conn);
+
+                    string matchCondition;
+                    string searchPattern = $"%{searchTerm}%";
+
+                    // Prepare the base SQL query
+                    StringBuilder sqlBuilder = new StringBuilder(@"
+                        SELECT 
+                            u.USER_ID, u.USER_NAME, u.FIRST_NAME, u.LAST_NAME, u.EMAIL, u.PHONE_NUMBER,
+                            u.AGE, u.BIRTHDAY, u.CIVIL_STATUS, u.ACCOUNT_STATUS, u.CREATEDATE, u.UPDATEDATE,
+                            ua.STREET, ua.CITY, ua.STATE, ua.ZIPCODE, ua.COUNTRY,
+                            r.ROLE_NAME");
+
+                    // Add relevance score for sorting
+                    if (!string.IsNullOrWhiteSpace(searchTerm))
+                    {
+                        // In the SearchUsers method, update the CASE statement and MATCH expression:
+                        sqlBuilder.Append(@",
+                        (CASE
+                            WHEN u.USER_NAME = @ExactMatch THEN 100
+                            WHEN u.EMAIL = @ExactMatch THEN 95
+                            WHEN CONCAT(u.FIRST_NAME, ' ', u.LAST_NAME) = @ExactMatch THEN 90
+                            WHEN u.USER_NAME LIKE @StartsWith THEN 85
+                            WHEN u.EMAIL LIKE @StartsWith THEN 80
+                            WHEN u.FIRST_NAME LIKE @StartsWith OR u.LAST_NAME LIKE @StartsWith THEN 75
+                            WHEN MATCH(u.FIRST_NAME, u.LAST_NAME, u.EMAIL) AGAINST(@SearchTerm IN BOOLEAN MODE) THEN 70
+                            WHEN u.USER_NAME LIKE @Contains THEN 65
+                            WHEN u.EMAIL LIKE @Contains THEN 60
+                            WHEN u.FIRST_NAME LIKE @Contains OR u.LAST_NAME LIKE @Contains THEN 55
+                            WHEN SOUNDEX(u.FIRST_NAME) = SOUNDEX(@SearchTerm) THEN 50
+                            WHEN SOUNDEX(u.LAST_NAME) = SOUNDEX(@SearchTerm) THEN 45
+                            ELSE 0
+                        END) AS relevance");
+                    }
+
+                    sqlBuilder.Append(@"
+                        FROM USERS u
+                        LEFT JOIN USER_ROLES ur ON u.USER_ID = ur.USER_ID
+                        LEFT JOIN ROLES r ON ur.ROLE_ID = r.ROLE_ID
+                        LEFT JOIN USER_ADDRESSES ua ON u.USER_ID = ua.USER_ID
+                        WHERE ");
+
+                    // Build search condition
+                    if (string.IsNullOrWhiteSpace(searchTerm))
+                    {
+                        sqlBuilder.Append(" 1=1 "); // Match all if no search term
+                    }
+                    else
+                    {
+                        // Update the WHERE clause to match the FULLTEXT index columns
+                        sqlBuilder.Append(@"(
+                            MATCH(u.FIRST_NAME, u.LAST_NAME, u.EMAIL) AGAINST(@SearchTerm IN BOOLEAN MODE)
+                            OR u.FIRST_NAME LIKE @Contains 
+                            OR u.LAST_NAME LIKE @Contains 
+                            OR u.EMAIL LIKE @Contains 
+                            OR u.USER_NAME LIKE @Contains
+                            OR SOUNDEX(u.FIRST_NAME) = SOUNDEX(@SearchTerm)
+                            OR SOUNDEX(u.LAST_NAME) = SOUNDEX(@SearchTerm)
+                        )");
+                    }
+
+                    // Add account status filter if provided
+                    if (!string.IsNullOrEmpty(accountStatus))
+                    {
+                        sqlBuilder.Append(" AND u.ACCOUNT_STATUS = @AccountStatus");
+                    }
+
+                    // Add ordering by relevance if searching, otherwise by USER_ID
+                    if (!string.IsNullOrWhiteSpace(searchTerm))
+                    {
+                        sqlBuilder.Append(" ORDER BY relevance DESC, u.USER_ID");
+                    }
+                    else
+                    {
+                        sqlBuilder.Append(" ORDER BY u.USER_ID");
+                    }
+
+                    using (var cmd = new MySqlCommand(sqlBuilder.ToString(), conn))
+                    {
+                        if (!string.IsNullOrWhiteSpace(searchTerm))
+                        {
+                            cmd.Parameters.AddWithValue("@SearchTerm", searchTerm);
+                            cmd.Parameters.AddWithValue("@ExactMatch", searchTerm);
+                            cmd.Parameters.AddWithValue("@StartsWith", $"{searchTerm}%");
+                            cmd.Parameters.AddWithValue("@Contains", $"%{searchTerm}%");
+                        }
+
+                        if (!string.IsNullOrEmpty(accountStatus))
+                        {
+                            cmd.Parameters.AddWithValue("@AccountStatus", accountStatus);
+                        }
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            var userDict = new Dictionary<int, UserDetail>();
+
+                            while (reader.Read())
+                            {
+                                int userId = reader.GetInt32("USER_ID");
+
+                                if (!userDict.ContainsKey(userId))
+                                {
+                                    var user = new UserDetail
+                                    {
+                                        UserId = userId,
+                                        UserName = reader.GetString("USER_NAME"),
+                                        FirstName = reader.GetString("FIRST_NAME"),
+                                        LastName = reader.GetString("LAST_NAME"),
+                                        Email = reader.GetString("EMAIL"),
+                                        PhoneNumber = reader.IsDBNull(reader.GetOrdinal("PHONE_NUMBER")) ? null : reader.GetString("PHONE_NUMBER"),
+                                        Age = reader.GetInt32("AGE"),
+                                        Birthday = reader.GetDateTime("BIRTHDAY"),
+                                        CivilStatus = reader.GetString("CIVIL_STATUS"),
+                                        AccountStatus = reader.GetString("ACCOUNT_STATUS"),
+                                        CreateDate = reader.GetDateTime("CREATEDATE"),
+                                        UpdateDate = reader.IsDBNull(reader.GetOrdinal("UPDATEDATE")) ? (DateTime?)null : reader.GetDateTime("UPDATEDATE"),
+                                        Address = !reader.IsDBNull(reader.GetOrdinal("STREET")) ? new UserAddress
+                                        {
+                                            Street = reader.GetString("STREET"),
+                                            City = reader.GetString("CITY"),
+                                            State = reader.GetString("STATE"),
+                                            ZipCode = reader.GetString("ZIPCODE"),
+                                            Country = reader.GetString("COUNTRY")
+                                        } : null
+                                    };
+
+                                    if (!reader.IsDBNull(reader.GetOrdinal("ROLE_NAME")))
+                                    {
+                                        string roleName = reader.GetString("ROLE_NAME");
+                                        user.Roles.Add(roleName);
+                                    }
+
+                                    userDict.Add(userId, user);
+                                }
+                                else if (!reader.IsDBNull(reader.GetOrdinal("ROLE_NAME")))
+                                {
+                                    string roleName = reader.GetString("ROLE_NAME");
+                                    if (!userDict[userId].Roles.Contains(roleName))
+                                    {
+                                        userDict[userId].Roles.Add(roleName);
+                                    }
+                                }
+                            }
+
+                            response.Users = userDict.Values.ToList();
+                        }
+                    }
+                }
+
+                response.isSuccess = true;
+                if (string.IsNullOrEmpty(accountStatus))
+                    response.Message = $"Users matching '{searchTerm}' retrieved successfully.";
+                else
+                    response.Message = $"Users matching '{searchTerm}' with status '{accountStatus}' retrieved successfully.";
+            }
+            catch (MySqlException ex) when (ex.Number == 1214)
+            {
+                // This is specifically for handling the case where FULLTEXT index doesn't exist yet
+                // Fall back to the old LIKE-only search method
+                return FallbackSearchUsers(searchTerm, accountStatus);
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error searching users: {ex.Message}";
+            }
+
+            return response;
+        }
+
+        // Fallback search method that uses only LIKE
+        private GetUsersByRoleResponse FallbackSearchUsers(string searchTerm, string accountStatus = null)
+        {
+            var response = new GetUsersByRoleResponse
+            {
+                Users = new List<UserDetail>()
+            };
+
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+
+                    string sql = @"
+                        SELECT 
+                            u.USER_ID, u.USER_NAME, u.FIRST_NAME, u.LAST_NAME, u.EMAIL, u.PHONE_NUMBER,
+                            u.AGE, u.BIRTHDAY, u.CIVIL_STATUS, u.ACCOUNT_STATUS, u.CREATEDATE, u.UPDATEDATE,
+                            ua.STREET, ua.CITY, ua.STATE, ua.ZIPCODE, ua.COUNTRY,
+                            r.ROLE_NAME
+                        FROM USERS u
+                        LEFT JOIN USER_ROLES ur ON u.USER_ID = ur.USER_ID
+                        LEFT JOIN ROLES r ON ur.ROLE_ID = r.ROLE_ID
+                        LEFT JOIN USER_ADDRESSES ua ON u.USER_ID = ua.USER_ID
+                        WHERE (u.FIRST_NAME LIKE @SearchTerm 
+                            OR u.LAST_NAME LIKE @SearchTerm 
+                            OR u.EMAIL LIKE @SearchTerm 
+                            OR u.USER_NAME LIKE @SearchTerm)";
+
+                    if (!string.IsNullOrEmpty(accountStatus))
+                    {
+                        sql += " AND u.ACCOUNT_STATUS = @AccountStatus";
+                    }
+
+                    sql += " ORDER BY u.USER_ID";
+
+                    using (var cmd = new MySqlCommand(sql, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@SearchTerm", $"%{searchTerm}%");
+                        if (!string.IsNullOrEmpty(accountStatus))
+                        {
+                            cmd.Parameters.AddWithValue("@AccountStatus", accountStatus);
+                        }
+
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            var userDict = new Dictionary<int, UserDetail>();
+
+                            while (reader.Read())
+                            {
+                                int userId = reader.GetInt32("USER_ID");
+
+                                if (!userDict.ContainsKey(userId))
+                                {
+                                    var user = new UserDetail
+                                    {
+                                        UserId = userId,
+                                        UserName = reader.GetString("USER_NAME"),
+                                        FirstName = reader.GetString("FIRST_NAME"),
+                                        LastName = reader.GetString("LAST_NAME"),
+                                        Email = reader.GetString("EMAIL"),
+                                        PhoneNumber = reader.IsDBNull(reader.GetOrdinal("PHONE_NUMBER")) ? null : reader.GetString("PHONE_NUMBER"),
+                                        Age = reader.GetInt32("AGE"),
+                                        Birthday = reader.GetDateTime("BIRTHDAY"),
+                                        CivilStatus = reader.GetString("CIVIL_STATUS"),
+                                        AccountStatus = reader.GetString("ACCOUNT_STATUS"),
+                                        CreateDate = reader.GetDateTime("CREATEDATE"),
+                                        UpdateDate = reader.IsDBNull(reader.GetOrdinal("UPDATEDATE")) ? (DateTime?)null : reader.GetDateTime("UPDATEDATE"),
+                                        Address = !reader.IsDBNull(reader.GetOrdinal("STREET")) ? new UserAddress
+                                        {
+                                            Street = reader.GetString("STREET"),
+                                            City = reader.GetString("CITY"),
+                                            State = reader.GetString("STATE"),
+                                            ZipCode = reader.GetString("ZIPCODE"),
+                                            Country = reader.GetString("COUNTRY")
+                                        } : null
+                                    };
+
+                                    if (!reader.IsDBNull(reader.GetOrdinal("ROLE_NAME")))
+                                    {
+                                        string roleName = reader.GetString("ROLE_NAME");
+                                        user.Roles.Add(roleName);
+                                    }
+
+                                    userDict.Add(userId, user);
+                                }
+                                else if (!reader.IsDBNull(reader.GetOrdinal("ROLE_NAME")))
+                                {
+                                    string roleName = reader.GetString("ROLE_NAME");
+                                    if (!userDict[userId].Roles.Contains(roleName))
+                                    {
+                                        userDict[userId].Roles.Add(roleName);
+                                    }
+                                }
+                            }
+
+                            response.Users = userDict.Values.ToList();
+                        }
+                    }
+                }
+
+                response.isSuccess = true;
+                if (string.IsNullOrEmpty(accountStatus))
+                    response.Message = $"Users matching '{searchTerm}' retrieved successfully (basic search).";
+                else
+                    response.Message = $"Users matching '{searchTerm}' with status '{accountStatus}' retrieved successfully (basic search).";
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error searching users: {ex.Message}";
+            }
+
+            return response;
+        }
+
+        // Helper method to ensure required FULLTEXT indexes exist
+        private void EnsureFullTextIndexes(MySqlConnection conn)
+        {
+            try
+            {
+                // Check if the FULLTEXT index exists
+                using (var cmd = new MySqlCommand(@"
+                    SELECT COUNT(*) 
+                    FROM INFORMATION_SCHEMA.STATISTICS 
+                    WHERE TABLE_SCHEMA = DATABASE() 
+                    AND TABLE_NAME = 'USERS' 
+                    AND INDEX_NAME = 'idx_users_fulltext'", conn))
+                {
+                    int indexExists = Convert.ToInt32(cmd.ExecuteScalar());
+
+                    // If index doesn't exist, create it
+                    if (indexExists == 0)
+                    {
+                        using (var createCmd = new MySqlCommand(
+                            "ALTER TABLE USERS ADD FULLTEXT INDEX idx_users_fulltext (FIRST_NAME, LAST_NAME, EMAIL)", conn))
+                        {
+                            createCmd.ExecuteNonQuery();
+                        }
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                // If we can't create the index, we'll fall back to basic search
+                throw;
+            }
+        }
+        public BasicResponse RemoveRoleFromUser(int userId, int roleId)
+        {
+            var response = new BasicResponse();
+
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            using (var checkUserCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM USERS WHERE USER_ID = @UserId",
+                                conn, transaction))
+                            {
+                                checkUserCmd.Parameters.AddWithValue("@UserId", userId);
+                                int userExists = Convert.ToInt32(checkUserCmd.ExecuteScalar());
+                                if (userExists == 0)
+                                {
+                                    throw new Exception("User not found");
+                                }
+                            }
+
+                            // Check if role exists
+                            using (var checkRoleCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM ROLES WHERE ROLE_ID = @RoleId",
+                                conn, transaction))
+                            {
+                                checkRoleCmd.Parameters.AddWithValue("@RoleId", roleId);
+                                int roleExists = Convert.ToInt32(checkRoleCmd.ExecuteScalar());
+                                if (roleExists == 0)
+                                {
+                                    throw new Exception("Role not found");
+                                }
+                            }
+
+                            // Check if role is assigned to user
+                            using (var checkAssignmentCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM USER_ROLES WHERE USER_ID = @UserId AND ROLE_ID = @RoleId",
+                                conn, transaction))
+                            {
+                                checkAssignmentCmd.Parameters.AddWithValue("@UserId", userId);
+                                checkAssignmentCmd.Parameters.AddWithValue("@RoleId", roleId);
+                                int isAssigned = Convert.ToInt32(checkAssignmentCmd.ExecuteScalar());
+                                if (isAssigned == 0)
+                                {
+                                    throw new Exception("Role is not assigned to this user");
+                                }
+                            }
+
+                            // Remove role from user
+                            using (var cmd = new MySqlCommand(
+                                "DELETE FROM USER_ROLES WHERE USER_ID = @UserId AND ROLE_ID = @RoleId",
+                                conn, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@UserId", userId);
+                                cmd.Parameters.AddWithValue("@RoleId", roleId);
+                                cmd.ExecuteNonQuery();
+                            }
+
+                            string roleName;
+                            using (var getRoleNameCmd = new MySqlCommand(
+                                "SELECT ROLE_NAME FROM ROLES WHERE ROLE_ID = @RoleId",
+                                conn, transaction))
+                            {
+                                getRoleNameCmd.Parameters.AddWithValue("@RoleId", roleId);
+                                roleName = (string)getRoleNameCmd.ExecuteScalar();
+                            }
+
+                            transaction.Commit();
+                            response.isSuccess = true;
+                            response.Message = $"Role '{roleName}' removed from user successfully";
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error removing role from user: {ex.Message}";
+            }
+
+            return response;
+        }
+
+        public SessionListResponse GetActiveSessions()
+        {
+            var response = new SessionListResponse
+            {
+                Sessions = new List<SessionInfo>()
+            };
+
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+
+                    string sql = @"
+                        SELECT 
+                            s.SESSION_ID, s.USER_ID, s.CREATED_AT, s.EXPIRES_AT,
+                            u.USER_NAME, u.FIRST_NAME, u.LAST_NAME, u.EMAIL
+                        FROM SESSIONS s
+                        JOIN USERS u ON s.USER_ID = u.USER_ID
+                        WHERE s.EXPIRES_AT > NOW()
+                        ORDER BY s.CREATED_AT DESC";
+
+                    using (var cmd = new MySqlCommand(sql, conn))
+                    {
+                        using (var reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                var session = new SessionInfo
+                                {
+                                    SessionId = reader.GetString("SESSION_ID"),
+                                    UserId = reader.GetInt32("USER_ID"),
+                                    UserName = reader.GetString("USER_NAME"),
+                                    FirstName = reader.GetString("FIRST_NAME"),
+                                    LastName = reader.GetString("LAST_NAME"),
+                                    Email = reader.GetString("EMAIL"),
+                                    CreatedAt = reader.GetDateTime("CREATED_AT"),
+                                    ExpiresAt = reader.GetDateTime("EXPIRES_AT")
+                                };
+
+                                response.Sessions.Add(session);
+                            }
+                        }
+                    }
+                }
+
+                response.isSuccess = true;
+                response.Message = "Active sessions retrieved successfully";
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error retrieving active sessions: {ex.Message}";
+            }
+
+            return response;
+        }
+
+        public BasicResponse InvalidateUserSessions(int userId)
+        {
+            var response = new BasicResponse();
+
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            // Check if user exists
+                            using (var checkUserCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM USERS WHERE USER_ID = @UserId",
+                                conn, transaction))
+                            {
+                                checkUserCmd.Parameters.AddWithValue("@UserId", userId);
+                                int userExists = Convert.ToInt32(checkUserCmd.ExecuteScalar());
+                                if (userExists == 0)
+                                {
+                                    throw new Exception("User not found");
+                                }
+                            }
+
+                            // Get active session count
+                            int sessionCount;
+                            using (var countCmd = new MySqlCommand(
+                                "SELECT COUNT(*) FROM SESSIONS WHERE USER_ID = @UserId",
+                                conn, transaction))
+                            {
+                                countCmd.Parameters.AddWithValue("@UserId", userId);
+                                sessionCount = Convert.ToInt32(countCmd.ExecuteScalar());
+                            }
+
+                            if (sessionCount == 0)
+                            {
+                                response.isSuccess = true;
+                                response.Message = "No active sessions found for this user";
+                                return response;
+                            }
+
+                            // Delete the sessions
+                            using (var cmd = new MySqlCommand(
+                                "DELETE FROM SESSIONS WHERE USER_ID = @UserId",
+                                conn, transaction))
+                            {
+                                cmd.Parameters.AddWithValue("@UserId", userId);
+                                cmd.ExecuteNonQuery();
+                            }
+
+                            transaction.Commit();
+                            response.isSuccess = true;
+                            response.Message = $"Successfully invalidated {sessionCount} session(s) for user";
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error invalidating user sessions: {ex.Message}";
+            }
+
+            return response;
+        }
+
+        public UserStatisticsResponse GetUserStatistics()
+        {
+            var response = new UserStatisticsResponse();
+
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+
+                    // Get user counts by role
+                    using (var roleCmd = new MySqlCommand(@"
+                        SELECT r.ROLE_NAME, COUNT(DISTINCT ur.USER_ID) as USER_COUNT
+                        FROM ROLES r
+                        LEFT JOIN USER_ROLES ur ON r.ROLE_ID = ur.ROLE_ID
+                        GROUP BY r.ROLE_NAME", conn))
+                    {
+                        using (var reader = roleCmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                response.UserCountsByRole.Add(
+                                    reader.GetString("ROLE_NAME"),
+                                    reader.GetInt32("USER_COUNT")
+                                );
+                            }
+                        }
+                    }
+
+                    // Get user counts by status
+                    using (var statusCmd = new MySqlCommand(@"
+                        SELECT ACCOUNT_STATUS, COUNT(*) as USER_COUNT
+                        FROM USERS
+                        GROUP BY ACCOUNT_STATUS", conn))
+                    {
+                        using (var reader = statusCmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                response.UserCountsByStatus.Add(
+                                    reader.GetString("ACCOUNT_STATUS"),
+                                    reader.GetInt32("USER_COUNT")
+                                );
+                            }
+                        }
+                    }
+
+                    // Get users created in the last 30 days
+                    using (var recentCmd = new MySqlCommand(@"
+                        SELECT COUNT(*) as COUNT FROM USERS 
+                        WHERE CREATEDATE >= DATE_SUB(NOW(), INTERVAL 30 DAY)", conn))
+                    {
+                        response.UsersCreatedLast30Days = Convert.ToInt32(recentCmd.ExecuteScalar());
+                    }
+
+                    // Get failed login attempts in the last 24 hours
+                    using (var failedCmd = new MySqlCommand(@"
+                        SELECT COUNT(*) as COUNT FROM FAILED_LOGINS 
+                        WHERE ATTEMPTDATE >= DATE_SUB(NOW(), INTERVAL 24 HOUR)", conn))
+                    {
+                        response.FailedLoginAttempts24Hours = Convert.ToInt32(failedCmd.ExecuteScalar());
+                    }
+
+                    // Get active session count
+                    using (var sessionCmd = new MySqlCommand(@"
+                        SELECT COUNT(*) as COUNT FROM SESSIONS 
+                        WHERE EXPIRES_AT > NOW()", conn))
+                    {
+                        response.ActiveSessionCount = Convert.ToInt32(sessionCmd.ExecuteScalar());
+                    }
+                }
+
+                response.isSuccess = true;
+                response.Message = "User statistics retrieved successfully";
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error retrieving user statistics: {ex.Message}";
+            }
+
+            return response;
+        }
+
+        public BasicResponse ChangePassword(int userId, ChangePasswordRequest request)
+        {
+            var response = new BasicResponse();
+
+            try
+            {
+                using (MySqlConnection conn = GetConnection())
+                {
+                    conn.Open();
+                    using (var transaction = conn.BeginTransaction())
+                    {
+                        try
+                        {
+                            // Get current password hash
+                            string currentPasswordHash;
+                            using (var getPasswordCmd = new MySqlCommand(
+                                "SELECT PASSWORD FROM USERS WHERE USER_ID = @UserId",
+                                conn, transaction))
+                            {
+                                getPasswordCmd.Parameters.AddWithValue("@UserId", userId);
+                                var result = getPasswordCmd.ExecuteScalar();
+                                if (result == null || result == DBNull.Value)
+                                {
+                                    throw new Exception("User not found");
+                                }
+
+                                currentPasswordHash = result.ToString();
+                            }
+
+                            // Verify current password
+                            bool isCurrentPasswordValid = PasswordHasher.VerifyPassword(
+                                request.CurrentPassword, currentPasswordHash);
+
+                            if (!isCurrentPasswordValid)
+                            {
+                                throw new Exception("Current password is incorrect");
+                            }
+
+                            // Update password
+                            string newPasswordHash = PasswordHasher.HashPassword(request.NewPassword);
+                            using (var updateCmd = new MySqlCommand(
+                                "UPDATE USERS SET PASSWORD = @NewPassword, UPDATEDATE = @UpdateDate WHERE USER_ID = @UserId",
+                                conn, transaction))
+                            {
+                                updateCmd.Parameters.AddWithValue("@NewPassword", newPasswordHash);
+                                updateCmd.Parameters.AddWithValue("@UpdateDate", DateTime.Now);
+                                updateCmd.Parameters.AddWithValue("@UserId", userId);
+                                updateCmd.ExecuteNonQuery();
+                            }
+
+                            transaction.Commit();
+                            response.isSuccess = true;
+                            response.Message = "Password changed successfully";
+                        }
+                        catch (Exception)
+                        {
+                            transaction.Rollback();
+                            throw;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                response.isSuccess = false;
+                response.Message = $"Error changing password: {ex.Message}";
+            }
+
+            return response;
+        }
     }
 }
-
-//TEST COMMENT

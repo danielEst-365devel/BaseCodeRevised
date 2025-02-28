@@ -344,7 +344,100 @@ namespace BaseCode.Controllers
                 : new BadRequestObjectResult(response);
         }
 
+        [Authorize(Roles = "Admin")]
+        [HttpGet("Customers")]
+        public IActionResult GetAllCustomers()
+        {
+            var response = db.GetUsersByRole("Customer");
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
 
+        [Authorize(Roles = "Admin")]
+        [HttpGet("Admins")]
+        public IActionResult GetAllAdmins()
+        {
+            var response = db.GetUsersByRole("Admin");
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
 
+        [Authorize(Roles = "Admin")]
+        [HttpGet("Users/Search")]
+        public IActionResult SearchUsers([FromQuery] string searchTerm, [FromQuery] string status = null)
+        {
+            if (string.IsNullOrWhiteSpace(searchTerm))
+                return BadRequest(new { isSuccess = false, Message = "Search term is required" });
+
+            var response = db.SearchUsers(searchTerm, status);
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("Users/RemoveRole")]
+        public IActionResult RemoveRoleFromUser([FromBody] RemoveRoleRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+                
+            var response = db.RemoveRoleFromUser(request.UserId, request.RoleId);
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpGet("Sessions")]
+        public IActionResult GetActiveSessions()
+        {
+            var response = db.GetActiveSessions();
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("Users/InvalidateSessions")]
+        public IActionResult InvalidateUserSessions([FromBody] InvalidateSessionsRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+                
+            var response = db.InvalidateUserSessions(request.UserId);
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpGet("Statistics")]
+        public IActionResult GetUserStatistics()
+        {
+            var response = db.GetUserStatistics();
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [Authorize]
+        [HttpPost("ChangePassword")]
+        public IActionResult ChangePassword([FromBody] ChangePasswordRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            try
+            {
+                var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim))
+                    return Unauthorized(new { Message = "Invalid token" });
+
+                int userId = int.Parse(userIdClaim);
+                var response = db.ChangePassword(userId, request);
+
+                if (response.isSuccess)
+                {
+                    // Optionally logout after password change by invalidating all sessions
+                    db.InvalidateUserSessions(userId);
+                    return Ok(response);
+                }
+                else
+                    return BadRequest(response);
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { isSuccess = false, Message = $"Error changing password: {ex.Message}" });
+            }
+        }
     }
 }
