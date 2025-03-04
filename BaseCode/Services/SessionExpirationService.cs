@@ -1,21 +1,29 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Data.SqlClient;
 using MySql.Data.MySqlClient;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Data.Common;
 
 public class SessionExpirationService : IHostedService, IDisposable
 {
     private readonly IConfiguration _configuration;
     private readonly TimeSpan _checkInterval;
     private Timer _timer;
+    private readonly bool _useOnlineDb;
 
     public SessionExpirationService(IConfiguration configuration)
     {
         _configuration = configuration;
         var intervalMinutes = _configuration.GetValue<int>("SessionSettings:ExpirationCheckIntervalMinutes", 30);
         _checkInterval = TimeSpan.FromMinutes(intervalMinutes);
+
+        // Check if we're using online database (Azure SQL)
+        _useOnlineDb = bool.Parse(Environment.GetEnvironmentVariable("USE_ONLINE_DB") ?? "false");
+
+        Console.WriteLine($"Session expiration service initialized with {(_useOnlineDb ? "ONLINE" : "LOCAL")} database.");
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
@@ -28,23 +36,42 @@ public class SessionExpirationService : IHostedService, IDisposable
     {
         try
         {
-            using (var conn = new MySqlConnection(_configuration.GetConnectionString("DefaultConnection")))
+            if (_useOnlineDb)
             {
-                conn.Open();
-                using (var cmd = new MySqlCommand(
-                    "DELETE FROM SESSIONS WHERE EXPIRES_AT < @Now", conn))
+                // Use SQL Server for Azure SQL Database
+                using (var conn = new SqlConnection(_configuration.GetConnectionString("DefaultConnection")))
                 {
-                    cmd.Parameters.AddWithValue("@Now", DateTime.UtcNow);
-                    int rowsAffected = cmd.ExecuteNonQuery();
-                    // Optional: Log rowsAffected for monitoring (e.g., ILogger if added)
-                    Console.WriteLine($"Expired {rowsAffected} sessions at {DateTime.UtcNow}.");
+                    conn.Open();
+                    using (var cmd = new SqlCommand(
+                        "DELETE FROM SESSIONS WHERE EXPIRES_AT < @Now", conn))
+                    {
+                        cmd.Parameters.AddWithValue("@Now", DateTime.UtcNow);
+                        int rowsAffected = cmd.ExecuteNonQuery();
+                        Console.WriteLine($"Expired {rowsAffected} sessions at {DateTime.UtcNow} (SQL Server).");
+                    }
+                }
+            }
+            else
+            {
+                // Use MySQL for local database
+                using (var conn = new MySqlConnection(_configuration.GetConnectionString("DefaultConnection")))
+                {
+                    conn.Open();
+                    using (var cmd = new MySqlCommand(
+                        "DELETE FROM SESSIONS WHERE EXPIRES_AT < @Now", conn))
+                    {
+                        cmd.Parameters.AddWithValue("@Now", DateTime.UtcNow);
+                        int rowsAffected = cmd.ExecuteNonQuery();
+                        Console.WriteLine($"Expired {rowsAffected} sessions at {DateTime.UtcNow} (MySQL).");
+                    }
                 }
             }
         }
         catch (Exception ex)
         {
-            // Optional: Log the exception (e.g., ILogger if added)
+            // Log the exception
             Console.WriteLine($"Error expiring sessions: {ex.Message}");
+            Console.WriteLine($"Stack trace: {ex.StackTrace}");
         }
     }
 
