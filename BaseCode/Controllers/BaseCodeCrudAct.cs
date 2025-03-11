@@ -17,6 +17,9 @@ using System.Linq;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using BaseCode.Models.Dealership.Requests;
+using BaseCode.Models.Dealership.Responses;
+using BaseCode.Services;
 
 namespace BaseCode.Controllers
 {
@@ -28,18 +31,20 @@ namespace BaseCode.Controllers
         private readonly IWebHostEnvironment hostingEnvironment;
         private IHttpContextAccessor _IPAccess;
         private readonly IConfiguration _configuration;
+        private readonly CarService _carService;
 
         private static readonly string[] Summaries = new[]
        {
             "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
         };
 
-        public BaseCodeCrudAct(DBCrudAct context, IWebHostEnvironment environment, IHttpContextAccessor accessor, IConfiguration configuration)
+        public BaseCodeCrudAct(DBCrudAct context, IWebHostEnvironment environment, IHttpContextAccessor accessor, IConfiguration configuration, CarService carService)
         {
             _IPAccess = accessor;
             db = context;
             hostingEnvironment = environment;
             _configuration = configuration;
+            _carService = carService;
         }
 
         [HttpGet]
@@ -119,6 +124,72 @@ namespace BaseCode.Controllers
 
             var response = db.LoginUser(request);
             return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        // CAR CRUD OPERATIONS
+        [HttpGet("cars")]
+        public IActionResult GetAllCars()
+        {
+            var response = _carService.GetAllCars();
+            return response.IsSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [HttpPost("car/getById")]
+        public IActionResult GetCarById([FromBody] GetCarByIdRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = _carService.GetCarById(request);
+            return response.IsSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [HttpPost("car/getByName")]
+        public IActionResult GetCarByName([FromBody] GetCarByNameRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = _carService.GetCarByName(request);
+            return response.IsSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("car/create")]
+        public IActionResult CreateCar([FromBody] CreateCarRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = _carService.CreateCar(request);
+            return response.IsSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("car/update")]
+        public IActionResult UpdateCar([FromBody] UpdateCarRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = _carService.UpdateCar(request);
+            return response.IsSuccess ? Ok(response) : BadRequest(response);
+        }
+
+        [Authorize(Roles = "Admin")]
+        [HttpPost("car/delete")]
+        public IActionResult DeleteCar([FromBody] GetCarByIdRequest request)
+        {
+            if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+            if (!int.TryParse(request.CarId, out int carId))
+            {
+                return BadRequest(new { IsSuccess = false, Message = "Invalid CarId format." });
+            }
+
+            var response = _carService.DeleteCar(carId);
+            return response.IsSuccess ? Ok(response) : BadRequest(response);
         }
 
         [HttpPost("Logout")]

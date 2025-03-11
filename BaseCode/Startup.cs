@@ -1,4 +1,5 @@
 using BaseCode.Models;
+using BaseCode.Services;
 using Jose;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -26,6 +27,7 @@ namespace BaseCode
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
+            // Primary database connection (BASE)
             var db_host = Environment.GetEnvironmentVariable("DB_HOST");
             var db_port = Environment.GetEnvironmentVariable("DB_PORT");
             var db_name = Environment.GetEnvironmentVariable("DB_NAME");
@@ -34,25 +36,38 @@ namespace BaseCode
 
             var conn = $"Server={db_host};Port={db_port};Database={db_name};Uid={db_user};Pwd={db_password};Convert Zero Datetime=True";
 
-            // Log the connection string for debugging purposes
-            Console.WriteLine($"Connection String: {conn}");
+            // Secondary database connection (DEALERSHIP)
+            var dealership_host = Environment.GetEnvironmentVariable("DEALERSHIP_DB_HOST");
+            var dealership_port = Environment.GetEnvironmentVariable("DEALERSHIP_DB_PORT");
+            var dealership_name = Environment.GetEnvironmentVariable("DEALERSHIP_DB_NAME");
+            var dealership_user = Environment.GetEnvironmentVariable("DEALERSHIP_DB_USER");
+            var dealership_password = Environment.GetEnvironmentVariable("DEALERSHIP_DB_PASS");
 
-            // Build a new configuration that includes the connection string under "DefaultConnection"
+            var dealershipConn = $"Server={dealership_host};Port={dealership_port};Database={dealership_name};Uid={dealership_user};Pwd={dealership_password};Convert Zero Datetime=True";
+
+            // Log the connection strings for debugging purposes
+            Console.WriteLine($"Primary Connection String: {conn}");
+            Console.WriteLine($"Dealership Connection String: {dealershipConn}");
+
+            // Build a new configuration that includes both connection strings
             var connectionStringConfig = new Dictionary<string, string>
-                {
-                    { "ConnectionStrings:DefaultConnection", conn }
-                };
+            {
+                { "ConnectionStrings:DefaultConnection", conn },
+                { "ConnectionStrings:DealershipConnection", dealershipConn }
+            };
 
             var configBuilder = new ConfigurationBuilder()
                 .AddConfiguration(Configuration)
                 .AddInMemoryCollection(connectionStringConfig);
             Configuration = configBuilder.Build();
 
-            // Existing DBContext registration
+            // Register database contexts
             services.Add(new ServiceDescriptor(typeof(DBContext), new DBContext(conn)));
-            // Update the DBCrudAct service registration to include the IConfiguration parameter
             services.Add(new ServiceDescriptor(typeof(DBCrudAct), new DBCrudAct(conn, Configuration)));
+            services.Add(new ServiceDescriptor(typeof(DealershipDBContext), new DealershipDBContext(dealershipConn)));
             
+            // Register services
+            services.AddScoped<CarService>();
 
             services.AddMvc().AddJsonOptions(o =>
             {
@@ -91,21 +106,11 @@ namespace BaseCode
                 app.UseDeveloperExceptionPage();
             }
 
-            //app.UseCors(x => x.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader());
-            //app.UseAuthentication();
-
-            using (var serviceScope = app.ApplicationServices.CreateScope())
-            {
-                // Example scope usage; uncomment if needed
-                // var services = serviceScope.ServiceProvider;
-                // var dbcon = services.GetService<DBContext>();
-            }
-
             app.UseHttpsRedirection();
 
             app.UseRouting();
 
-            app.UseAuthentication(); // Add this line before UseAuthorization
+            app.UseAuthentication();
             app.UseAuthorization();
 
             app.UseEndpoints(endpoints =>
