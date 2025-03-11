@@ -60,6 +60,7 @@ namespace BaseCode.Controllers
             .ToArray();
         }
 
+        #region BASIC CRUD OPERATIONS
         // START OF BASIC CRUD CONTROLLERS
         [Authorize(Policy = "CanCreateUsers")]
         [HttpPost("CreateUser")]
@@ -115,17 +116,10 @@ namespace BaseCode.Controllers
         }
 
         // END OF BASIC CRUD CONTROLLERS
-    
-        [HttpPost("LoginWithHeader")]
-        public IActionResult LoginWithHeader([FromBody] UserLoginRequest request)
-        {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+        #endregion
 
-            var response = db.LoginUser(request);
-            return response.isSuccess ? Ok(response) : BadRequest(response);
-        }
 
+        #region CAR CRUD OPERATIONS
         // CAR CRUD OPERATIONS
         [HttpGet("cars")]
         public IActionResult GetAllCars()
@@ -181,7 +175,7 @@ namespace BaseCode.Controllers
         public IActionResult DeleteCar([FromBody] GetCarByIdRequest request)
         {
             if (!ModelState.IsValid)
-            return BadRequest(ModelState);
+                return BadRequest(ModelState);
 
             if (!int.TryParse(request.CarId, out int carId))
             {
@@ -192,20 +186,52 @@ namespace BaseCode.Controllers
             return response.IsSuccess ? Ok(response) : BadRequest(response);
         }
 
+        #endregion
+
+
+        [HttpPost("LoginWithHeader")]
+        public IActionResult LoginWithHeader([FromBody] UserLoginRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var response = db.LoginUser(request);
+            return response.isSuccess ? Ok(response) : BadRequest(response);
+        }
+
         [HttpPost("Logout")]
         public IActionResult Logout()
         {
-            var jwt = Request.Headers["Authorization"].ToString().Substring("Bearer ".Length).Trim();
-            using (var conn = new MySqlConnection(_configuration.GetConnectionString("DefaultConnection")))
+            try
             {
-                conn.Open();
-                using (var cmd = new MySqlCommand("DELETE FROM SESSIONS WHERE SESSION_ID = @SessionId", conn))
+                var authHeader = Request.Headers["Authorization"].ToString();
+                if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
                 {
-                    cmd.Parameters.AddWithValue("@SessionId", jwt);
-                    cmd.ExecuteNonQuery();
+                    return BadRequest(new { isSuccess = false, Message = "Invalid authorization header" });
+                }
+
+                var jwt = authHeader.Substring("Bearer ".Length).Trim();
+
+                using (var conn = new MySqlConnection(_configuration.GetConnectionString("DefaultConnection")))
+                {
+                    conn.Open();
+                    using (var cmd = new MySqlCommand("DELETE FROM SESSIONS WHERE SESSION_ID = @SessionId", conn))
+                    {
+                        cmd.Parameters.AddWithValue("@SessionId", jwt);
+                        int rowsAffected = cmd.ExecuteNonQuery();
+                        
+                        // Even if no rows were affected (session might already be expired), we consider it a successful logout
+                        return Ok(new { isSuccess = true, Message = "Successfully logged out" });
+                    }
                 }
             }
-            return Ok("Logged out.");
+            catch (Exception ex)
+            {
+                // Log the exception (consider using a proper logging framework)
+                Console.WriteLine($"Error during logout: {ex.Message}");
+                return StatusCode(StatusCodes.Status500InternalServerError, 
+                    new { isSuccess = false, Message = "An error occurred during logout", Error = ex.Message });
+            }
         }
 
         // Add [Authorize] attribute to protected endpoints
@@ -281,7 +307,7 @@ namespace BaseCode.Controllers
                 return BadRequest(ModelState);
 
             var response = db.RequestPasswordReset(request);
-            
+
             if (response.isSuccess)
                 return Ok(response);
             else
@@ -448,7 +474,7 @@ namespace BaseCode.Controllers
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
-                
+
             var response = db.RemoveRoleFromUser(request.UserId, request.RoleId);
             return response.isSuccess ? Ok(response) : BadRequest(response);
         }
@@ -467,7 +493,7 @@ namespace BaseCode.Controllers
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
-                
+
             var response = db.InvalidateUserSessions(request.UserId);
             return response.isSuccess ? Ok(response) : BadRequest(response);
         }

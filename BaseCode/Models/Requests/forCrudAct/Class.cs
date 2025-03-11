@@ -72,6 +72,7 @@ namespace BaseCode.Models.Requests.forCrudAct
 
         public UserAddress Address { get; set; }
     }
+   
     public class UserAddress
     {
         [Required(ErrorMessage = "Street is required")]
