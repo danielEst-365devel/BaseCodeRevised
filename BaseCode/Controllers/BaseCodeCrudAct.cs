@@ -387,7 +387,7 @@ namespace BaseCode.Controllers
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpPost("Roles/Permissions")]  // Changed from PUT to POST and simplified route
+        [HttpPost("Roles/Permissions")]  
         public IActionResult UpdateRolePermissions([FromBody] UpdateRolePermissionsRequest request)
         {
             if (!ModelState.IsValid)
@@ -409,7 +409,7 @@ namespace BaseCode.Controllers
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpPost("ViewAllPermissions")]
+        [HttpGet("ViewAllPermissions")]
         public IActionResult ViewAllPermissions()
         {
             var response = db.ViewAllPermissions();
