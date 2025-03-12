@@ -21,6 +21,14 @@
         "DB_HOST": "localhost",
         "DB_USER": "root",
         "DB_PASS": "",
+<<<<<<< HEAD
+=======
+        "DEALERSHIP_DB_NAME": "DEALERSHIP",
+        "DEALERSHIP_DB_HOST": "localhost",
+        "DEALERSHIP_DB_PORT": "3306",
+        "DEALERSHIP_DB_USER": "root",
+        "DEALERSHIP_DB_PASS": "",
+>>>>>>> origin/role-based-access-control-for-crudActivityBranch
         "ASPNETCORE_ENVIRONMENT": "local",
         "TWILIO_ACCOUNT_SID": "ACffd6c0aa24f2062d6588a30e81c55e79",
         "TWILIO_AUTH_TOKEN": "e5d1b36346257ba69858e858259bca5b",
