@@ -21,17 +21,14 @@
         "DB_HOST": "localhost",
         "DB_USER": "root",
         "DB_PASS": "",
-<<<<<<< HEAD
-=======
         "DEALERSHIP_DB_NAME": "DEALERSHIP",
         "DEALERSHIP_DB_HOST": "localhost",
         "DEALERSHIP_DB_PORT": "3306",
         "DEALERSHIP_DB_USER": "root",
         "DEALERSHIP_DB_PASS": "",
->>>>>>> origin/role-based-access-control-for-crudActivityBranch
         "ASPNETCORE_ENVIRONMENT": "local",
         "TWILIO_ACCOUNT_SID": "ACffd6c0aa24f2062d6588a30e81c55e79",
-        "TWILIO_AUTH_TOKEN": "e5d1b36346257ba69858e858259bca5b",
+        "TWILIO_AUTH_TOKEN": "7faa918228bf83a8f8f866c6d35896d0",
         "TWILIO_FROM_NUMBER": "+12769001832",
         "JWT_SECRET_KEY": "your-super-secret-key-with-at-least-32-characters",
         "JWT_ISSUER": "BaseCode",
