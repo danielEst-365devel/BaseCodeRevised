@@ -25,7 +25,7 @@ namespace BaseCode.Controllers
 {
     [ApiController]
     [Route("crud")]
-    public class BaseCodeCrudAct : Controller
+    public class BaseCodeCrudController : Controller
     {
         private DBCrudAct db;
         private readonly IWebHostEnvironment hostingEnvironment;
@@ -38,7 +38,7 @@ namespace BaseCode.Controllers
             "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
         };
 
-        public BaseCodeCrudAct(DBCrudAct context, IWebHostEnvironment environment, IHttpContextAccessor accessor, IConfiguration configuration, CarService carService)
+        public BaseCodeCrudController(DBCrudAct context, IWebHostEnvironment environment, IHttpContextAccessor accessor, IConfiguration configuration, CarService carService)
         {
             _IPAccess = accessor;
             db = context;
@@ -121,69 +121,167 @@ namespace BaseCode.Controllers
 
         #region CAR CRUD OPERATIONS
         // CAR CRUD OPERATIONS
-        [HttpGet("cars")]
+        [HttpPost("GetCars")]
         public IActionResult GetAllCars()
         {
             var response = _carService.GetAllCars();
             return response.IsSuccess ? Ok(response) : BadRequest(response);
         }
 
-        [HttpPost("car/getById")]
+        [HttpPost("GetCarById")]
         public IActionResult GetCarById([FromBody] GetCarByIdRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var response = new GetCarResponse();
 
-            var response = _carService.GetCarById(request);
-            return response.IsSuccess ? Ok(response) : BadRequest(response);
+            if (string.IsNullOrEmpty(request.CarId))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarId.";
+                return BadRequest(response);
+            }
+
+            var serviceResponse = _carService.GetCarById(request);
+            return serviceResponse.IsSuccess ? Ok(serviceResponse) : BadRequest(serviceResponse);
         }
 
-        [HttpPost("car/getByName")]
+        [HttpPost("GetCarByName")]
         public IActionResult GetCarByName([FromBody] GetCarByNameRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var response = new GetCarResponse();
 
-            var response = _carService.GetCarByName(request);
-            return response.IsSuccess ? Ok(response) : BadRequest(response);
+            if (string.IsNullOrEmpty(request.SearchTerm))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify SearchTerm.";
+                return BadRequest(response);
+            }
+
+            var serviceResponse = _carService.GetCarByName(request);
+            return serviceResponse.IsSuccess ? Ok(serviceResponse) : BadRequest(serviceResponse);
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpPost("car/create")]
+        [HttpPost("CreateCar")]
         public IActionResult CreateCar([FromBody] CreateCarRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var response = new GetCarResponse();
 
-            var response = _carService.CreateCar(request);
-            return response.IsSuccess ? Ok(response) : BadRequest(response);
+            if (string.IsNullOrEmpty(request.CarModel))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarModel.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.CarBrand))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarBrand.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.CarHorsepower))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarHorsepower.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.CarSeater))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarSeater.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.CarColor))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarColor.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.CarPrice))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarPrice.";
+                return BadRequest(response);
+            }
+
+            var serviceResponse = _carService.CreateCar(request);
+            return serviceResponse.IsSuccess ? Ok(serviceResponse) : BadRequest(serviceResponse);
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpPost("car/update")]
+        [HttpPost("UpdateCarDetails")]
         public IActionResult UpdateCar([FromBody] UpdateCarRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var response = new GetCarResponse();
 
-            var response = _carService.UpdateCar(request);
-            return response.IsSuccess ? Ok(response) : BadRequest(response);
+            if (string.IsNullOrEmpty(request.CarId))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarId.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.CarModel))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarModel.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.CarBrand))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarBrand.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.CarHorsepower))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarHorsepower.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.CarSeater))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarSeater.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.CarColor))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarColor.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.CarPrice))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarPrice.";
+                return BadRequest(response);
+            }
+
+            var serviceResponse = _carService.UpdateCar(request);
+            return serviceResponse.IsSuccess ? Ok(serviceResponse) : BadRequest(serviceResponse);
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpPost("car/delete")]
+        [HttpPost("DeleteCar")]
         public IActionResult DeleteCar([FromBody] GetCarByIdRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var response = new GetCarResponse();
+
+            if (string.IsNullOrEmpty(request.CarId))
+            {
+                response.IsSuccess = false;
+                response.Message = "Please specify CarId.";
+                return BadRequest(response);
+            }
 
             if (!int.TryParse(request.CarId, out int carId))
             {
-                return BadRequest(new { IsSuccess = false, Message = "Invalid CarId format." });
+                response.IsSuccess = false;
+                response.Message = "Invalid CarId format. Please provide a valid numeric Id.";
+                return BadRequest(response);
             }
 
-            var response = _carService.DeleteCar(carId);
-            return response.IsSuccess ? Ok(response) : BadRequest(response);
+            var serviceResponse = _carService.DeleteCar(carId);
+            return serviceResponse.IsSuccess ? Ok(serviceResponse) : BadRequest(serviceResponse);
         }
 
         #endregion

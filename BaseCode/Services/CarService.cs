@@ -22,7 +22,7 @@ namespace BaseCode.Services
         {
             var response = new GetAllCarsResponse
             {
-                Cars = new List<Car>()
+                Cars = new List<Cars>()
             };
 
             try
@@ -39,20 +39,8 @@ namespace BaseCode.Services
                 
                 foreach (DataRow row in dataTable.Rows)
                 {
-                    var car = new Car
-                    {
-                        CarId = Convert.ToInt32(row["CAR_ID"]),
-                        CarModel = row["CAR_MODEL"].ToString(),
-                        CarBrand = row["CAR_BRAND"].ToString(),
-                        CarHorsepower = row["CAR_HORSEPOWER"].ToString(),
-                        CarSeater = row["CAR_SEATER"].ToString(),
-                        CarColor = row["CAR_COLOR"].ToString(),
-                        CarPrice = row["CAR_PRICE"].ToString(),
-                        CarStatus = row["CAR_STATUS"].ToString(),
-                        CarCreateDate = Convert.ToDateTime(row["CAR_CREATE_DATE"]),
-                        CarUpdateDate = Convert.ToDateTime(row["CAR_UPDATE_DATE"])
-                    };
-                    response.Cars.Add(car);
+                    // Use the factory method instead of manual mapping
+                    response.Cars.Add(Cars.FromDataRow(row));
                 }
 
                 response.IsSuccess = true;
@@ -90,20 +78,8 @@ namespace BaseCode.Services
 
                 if (dataTable.Rows.Count > 0)
                 {
-                    var row = dataTable.Rows[0];
-                    response.Car = new Car
-                    {
-                        CarId = Convert.ToInt32(row["CAR_ID"]),
-                        CarModel = row["CAR_MODEL"].ToString(),
-                        CarBrand = row["CAR_BRAND"].ToString(),
-                        CarHorsepower = row["CAR_HORSEPOWER"].ToString(),
-                        CarSeater = row["CAR_SEATER"].ToString(),
-                        CarColor = row["CAR_COLOR"].ToString(),
-                        CarPrice = row["CAR_PRICE"].ToString(),
-                        CarStatus = row["CAR_STATUS"].ToString(),
-                        CarCreateDate = Convert.ToDateTime(row["CAR_CREATE_DATE"]),
-                        CarUpdateDate = Convert.ToDateTime(row["CAR_UPDATE_DATE"])
-                    };
+                    // Use the factory method to create Car from DataRow and add to a new list
+                    response.Cars = new List<Cars> { Cars.FromDataRow(dataTable.Rows[0]) };
 
                     response.IsSuccess = true;
                     response.Message = "Car retrieved successfully";
@@ -125,7 +101,7 @@ namespace BaseCode.Services
 
         public GetCarResponse GetCarByName(GetCarByNameRequest request)
         {
-            var response = new GetCarResponse { Cars = new List<Car>() };
+            var response = new GetCarResponse { Cars = new List<Cars>() };
 
             try
             {
@@ -147,20 +123,8 @@ namespace BaseCode.Services
 
                 foreach (DataRow row in dataTable.Rows)
                 {
-                    var car = new Car
-                    {
-                        CarId = Convert.ToInt32(row["CAR_ID"]),
-                        CarModel = row["CAR_MODEL"].ToString(),
-                        CarBrand = row["CAR_BRAND"].ToString(),
-                        CarHorsepower = row["CAR_HORSEPOWER"].ToString(),
-                        CarSeater = row["CAR_SEATER"].ToString(),
-                        CarColor = row["CAR_COLOR"].ToString(),
-                        CarPrice = row["CAR_PRICE"].ToString(),
-                        CarStatus = row["CAR_STATUS"].ToString(),
-                        CarCreateDate = Convert.ToDateTime(row["CAR_CREATE_DATE"]),
-                        CarUpdateDate = Convert.ToDateTime(row["CAR_UPDATE_DATE"])
-                    };
-                    response.Cars.Add(car);
+                    // Use the factory method to create Car from DataRow
+                    response.Cars.Add(Cars.FromDataRow(row));
                 }
 
                 response.IsSuccess = true;

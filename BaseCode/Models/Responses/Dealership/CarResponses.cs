@@ -13,15 +13,14 @@ namespace BaseCode.Models.Dealership.Responses
     {
         public GetAllCarsResponse()
         {
-            Cars = new List<Car>();
+            Cars = new List<Cars>();
         }
 
-        public List<Car> Cars { get; set; }
+        public List<Cars> Cars { get; set; }
     }
 
     public class GetCarResponse : BasicResponse
     {
-        public Car Car { get; set; }
-        public List<Car> Cars { get; set; }
+        public List<Cars> Cars { get; set; }
     }
 }
