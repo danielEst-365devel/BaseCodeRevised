@@ -1483,6 +1483,21 @@ namespace BaseCode.Models
             var response = new AssignUserRoleResponse();
             try
             {
+                // Parse the string IDs to integers
+                if (!int.TryParse(request.UserId, out int userId))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Invalid User ID format";
+                    return response;
+                }
+
+                if (!int.TryParse(request.RoleId, out int roleId))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Invalid Role ID format";
+                    return response;
+                }
+
                 using (MySqlConnection conn = GetConnection())
                 {
                     conn.Open();
@@ -1495,7 +1510,7 @@ namespace BaseCode.Models
                                 "SELECT COUNT(*) FROM USERS WHERE USER_ID = @UserId",
                                 conn, transaction))
                             {
-                                userCheckCmd.Parameters.AddWithValue("@UserId", request.UserId);
+                                userCheckCmd.Parameters.AddWithValue("@UserId", userId);
                                 int userExists = Convert.ToInt32(userCheckCmd.ExecuteScalar());
                                 if (userExists == 0)
                                 {
@@ -1508,7 +1523,7 @@ namespace BaseCode.Models
                                 "SELECT COUNT(*) FROM ROLES WHERE ROLE_ID = @RoleId",
                                 conn, transaction))
                             {
-                                roleCheckCmd.Parameters.AddWithValue("@RoleId", request.RoleId);
+                                roleCheckCmd.Parameters.AddWithValue("@RoleId", roleId);
                                 int roleExists = Convert.ToInt32(roleCheckCmd.ExecuteScalar());
                                 if (roleExists == 0)
                                 {
@@ -1521,8 +1536,8 @@ namespace BaseCode.Models
                                 "SELECT COUNT(*) FROM USER_ROLES WHERE USER_ID = @UserId AND ROLE_ID = @RoleId",
                                 conn, transaction))
                             {
-                                checkExistingCmd.Parameters.AddWithValue("@UserId", request.UserId);
-                                checkExistingCmd.Parameters.AddWithValue("@RoleId", request.RoleId);
+                                checkExistingCmd.Parameters.AddWithValue("@UserId", userId);
+                                checkExistingCmd.Parameters.AddWithValue("@RoleId", roleId);
                                 int alreadyAssigned = Convert.ToInt32(checkExistingCmd.ExecuteScalar());
                                 if (alreadyAssigned > 0)
                                 {
@@ -1535,8 +1550,8 @@ namespace BaseCode.Models
                                 "INSERT INTO USER_ROLES (USER_ID, ROLE_ID) VALUES (@UserId, @RoleId)",
                                 conn, transaction))
                             {
-                                cmd.Parameters.AddWithValue("@UserId", request.UserId);
-                                cmd.Parameters.AddWithValue("@RoleId", request.RoleId);
+                                cmd.Parameters.AddWithValue("@UserId", userId);
+                                cmd.Parameters.AddWithValue("@RoleId", roleId);
                                 cmd.ExecuteNonQuery();
                             }
 
@@ -1545,7 +1560,7 @@ namespace BaseCode.Models
                                 "SELECT ROLE_NAME FROM ROLES WHERE ROLE_ID = @RoleId",
                                 conn, transaction))
                             {
-                                getRoleCmd.Parameters.AddWithValue("@RoleId", request.RoleId);
+                                getRoleCmd.Parameters.AddWithValue("@RoleId", roleId);
                                 using (var reader = getRoleCmd.ExecuteReader())
                                 {
                                     if (reader.Read())
@@ -1716,7 +1731,6 @@ namespace BaseCode.Models
                     // First, check if we need to create FULLTEXT indexes
                     EnsureFullTextIndexes(conn);
 
-                    string matchCondition;
                     string searchPattern = $"%{searchTerm}%";
 
                     // Prepare the base SQL query

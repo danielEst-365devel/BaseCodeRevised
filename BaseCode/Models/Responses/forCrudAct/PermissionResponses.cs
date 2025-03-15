@@ -22,8 +22,8 @@ namespace BaseCode.Models.Responses.forCrudAct
     {
         public bool isSuccess { get; set; }
         public string Message { get; set; }
-        public int UserId { get; set; }
-        public int RoleId { get; set; }
+        public string UserId { get; set; }
+        public string RoleId { get; set; }
         public string RoleName { get; set; }
     }
 }

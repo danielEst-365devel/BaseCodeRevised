@@ -66,10 +66,86 @@ namespace BaseCode.Controllers
         [HttpPost("CreateUser")]
         public IActionResult CreateUser([FromBody] CreateUserRequest r)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var response = new CreateUserResponse();
 
-            var response = db.CreateUser(r);
+            if (string.IsNullOrEmpty(r.UserName))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Username.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(r.FirstName))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify First name.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(r.LastName))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Last name.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(r.Email))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Email.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(r.Password))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Password.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(r.PhoneNumber))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Phone Number.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(r.CivilStatus))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Civil Status.";
+                return BadRequest(response);
+            }
+
+            if (r.Address != null)
+            {
+                if (string.IsNullOrEmpty(r.Address.Street))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Please specify Street.";
+                    return BadRequest(response);
+                }
+                if (string.IsNullOrEmpty(r.Address.City))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Please specify City.";
+                    return BadRequest(response);
+                }
+                if (string.IsNullOrEmpty(r.Address.State))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Please specify State.";
+                    return BadRequest(response);
+                }
+                if (string.IsNullOrEmpty(r.Address.ZipCode))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Please specify Zip Code.";
+                    return BadRequest(response);
+                }
+                if (string.IsNullOrEmpty(r.Address.Country))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Please specify Country.";
+                    return BadRequest(response);
+                }
+            }
+
+            response = db.CreateUser(r);
             if (response.isSuccess)
                 return Ok(response);
             else
@@ -77,7 +153,7 @@ namespace BaseCode.Controllers
         }
 
         [Authorize(Policy = "CanViewActiveUsers")]
-        [HttpGet("ActiveUsers")]
+        [HttpPost("ActiveUsers")]
         public IActionResult GetActiveUsers()
         {
             var response = db.GetActiveUsers();
@@ -91,10 +167,98 @@ namespace BaseCode.Controllers
         [HttpPost("UpdateUserById")]
         public IActionResult UpdateUserById([FromBody] UpdateUserByIdRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var response = new UpdateUserResponse();
 
-            var response = db.UpdateUserById(request);
+            if (string.IsNullOrEmpty(request.UserId))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify User ID.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.UserName))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Username.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.FirstName))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify First name.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.LastName))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Last name.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.Email))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Email.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.PhoneNumber))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Phone Number.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.CivilStatus))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Civil Status.";
+                return BadRequest(response);
+            }
+            if (string.IsNullOrEmpty(request.AccountStatus))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Account Status.";
+                return BadRequest(response);
+            }
+            if (request.AccountStatus != "A" && request.AccountStatus != "I")
+            {
+                response.isSuccess = false;
+                response.Message = "Account Status must be either 'A' (Active) or 'I' (Inactive).";
+                return BadRequest(response);
+            }
+
+            if (request.Address != null)
+            {
+                if (string.IsNullOrEmpty(request.Address.Street))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Please specify Street.";
+                    return BadRequest(response);
+                }
+                if (string.IsNullOrEmpty(request.Address.City))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Please specify City.";
+                    return BadRequest(response);
+                }
+                if (string.IsNullOrEmpty(request.Address.State))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Please specify State.";
+                    return BadRequest(response);
+                }
+                if (string.IsNullOrEmpty(request.Address.ZipCode))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Please specify Zip Code.";
+                    return BadRequest(response);
+                }
+                if (string.IsNullOrEmpty(request.Address.Country))
+                {
+                    response.isSuccess = false;
+                    response.Message = "Please specify Country.";
+                    return BadRequest(response);
+                }
+            }
+
+            response = db.UpdateUserById(request);
             if (response.isSuccess)
                 return Ok(response);
             else
@@ -105,10 +269,16 @@ namespace BaseCode.Controllers
         [HttpPost("DeleteUser")]
         public IActionResult DeleteUser([FromBody] DeleteUserRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var response = new DeleteUserResponse();
 
-            var response = db.DeleteUser(request);
+            if (string.IsNullOrEmpty(request.UserId))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify User ID.";
+                return BadRequest(response);
+            }
+
+            response = db.DeleteUser(request);
             if (response.isSuccess)
                 return Ok(response);
             else
@@ -317,7 +487,7 @@ namespace BaseCode.Controllers
                     {
                         cmd.Parameters.AddWithValue("@SessionId", jwt);
                         int rowsAffected = cmd.ExecuteNonQuery();
-                        
+
                         // Even if no rows were affected (session might already be expired), we consider it a successful logout
                         return Ok(new { isSuccess = true, Message = "Successfully logged out" });
                     }
@@ -327,14 +497,14 @@ namespace BaseCode.Controllers
             {
                 // Log the exception (consider using a proper logging framework)
                 Console.WriteLine($"Error during logout: {ex.Message}");
-                return StatusCode(StatusCodes.Status500InternalServerError, 
+                return StatusCode(StatusCodes.Status500InternalServerError,
                     new { isSuccess = false, Message = "An error occurred during logout", Error = ex.Message });
             }
         }
 
         // Add [Authorize] attribute to protected endpoints
         [Authorize]
-        [HttpGet("UserProfile")]
+        [HttpPost("UserProfile")]
         public IActionResult GetUserProfile()
         {
             try
@@ -373,7 +543,7 @@ namespace BaseCode.Controllers
         }
 
         [Authorize]
-        [HttpPut("UpdateProfile")]
+        [HttpPost("UpdateProfile")]
         public IActionResult UpdateUserProfile([FromBody] UpdateUserRequest request)
         {
             try
@@ -397,12 +567,13 @@ namespace BaseCode.Controllers
                 return BadRequest(new { isSuccess = false, Message = "Error updating user profile: " + ex.Message });
             }
         }
-
         [HttpPost("ForgetPassword")]
         public IActionResult ForgetPassword([FromBody] ForgetPasswordRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            if (string.IsNullOrEmpty(request.Email))
+            {
+                return BadRequest(new { isSuccess = false, Message = "Please specify Email." });
+            }
 
             var response = db.RequestPasswordReset(request);
 
@@ -415,8 +586,14 @@ namespace BaseCode.Controllers
         [HttpPost("ConfirmOTP")]
         public IActionResult ConfirmOtp([FromBody] ConfirmOtpRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            if (string.IsNullOrEmpty(request.Email))
+            {
+                return BadRequest(new { isSuccess = false, Message = "Please specify Email." });
+            }
+            if (string.IsNullOrEmpty(request.Otp))
+            {
+                return BadRequest(new { isSuccess = false, Message = "Please specify OTP." });
+            }
 
             var response = db.ConfirmOtp(request);
 
@@ -431,15 +608,16 @@ namespace BaseCode.Controllers
             return Ok(response);
         }
 
-
         [HttpPost("ResetPassword")]
         public IActionResult ResetPassword([FromHeader(Name = "Authorization")] string authorization, [FromBody] ResetPasswordRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            if (string.IsNullOrEmpty(request.NewPassword))
+            {
+                return BadRequest(new { isSuccess = false, Message = "Please specify New Password." });
+            }
 
             if (string.IsNullOrEmpty(authorization) || !authorization.StartsWith("Bearer "))
-                return StatusCode(StatusCodes.Status401Unauthorized, new { message = "Invalid token format" });
+                return StatusCode(StatusCodes.Status401Unauthorized, new { isSuccess = false, Message = "Invalid token format" });
 
             try
             {
@@ -464,9 +642,8 @@ namespace BaseCode.Controllers
                     new { isSuccess = false, Message = "Internal server error during password reset" });
             }
         }
-
         [Authorize(Roles = "Admin")]
-        [HttpGet("Roles")]
+        [HttpPost("GetRoles")]
         public IActionResult GetRoles()
         {
             var response = db.GetRoles();
@@ -474,24 +651,43 @@ namespace BaseCode.Controllers
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpPost("Roles")]
+        [HttpPost("CreateRole")]
         public IActionResult CreateRole([FromBody] CreateRoleRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var response = new CreateRoleResponse();
 
-            var response = db.CreateRole(request);
+            if (string.IsNullOrEmpty(request.RoleName))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Role Name.";
+                return BadRequest(response);
+            }
+
+            response = db.CreateRole(request);
             return response.isSuccess ? Ok(response) : BadRequest(response);
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpPost("Roles/Permissions")]  
+        [HttpPost("UpdateRolePermissions")]
         public IActionResult UpdateRolePermissions([FromBody] UpdateRolePermissionsRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var response = new UpdateRolePermissionsResponse();
 
-            var response = db.UpdateRolePermissions(request);
+            if (request.RoleId <= 0)
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify a valid Role ID.";
+                return BadRequest(response);
+            }
+
+            if (request.PermissionIds == null || !request.PermissionIds.Any())
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify at least one Permission ID.";
+                return BadRequest(response);
+            }
+
+            response = db.UpdateRolePermissions(request);
             return response.isSuccess ? Ok(response) : BadRequest(response);
         }
 
@@ -499,15 +695,21 @@ namespace BaseCode.Controllers
         [HttpPost("CreatePermissions")]
         public IActionResult CreatePermission([FromBody] PermissionCreateRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var response = new PermissionResponse();
 
-            var response = db.CreatePermission(request);
+            if (string.IsNullOrEmpty(request.PermissionName))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Permission Name.";
+                return BadRequest(response);
+            }
+
+            response = db.CreatePermission(request);
             return response.isSuccess ? Ok(response) : BadRequest(response);
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpGet("ViewAllPermissions")]
+        [HttpPost("ViewAllPermissions")]
         public IActionResult ViewAllPermissions()
         {
             var response = db.ViewAllPermissions();
@@ -518,29 +720,52 @@ namespace BaseCode.Controllers
         [HttpPost("EditPermissions")]
         public IActionResult EditPermission([FromBody] PermissionEditRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            var response = new PermissionResponse();
 
-            var response = db.EditPermission(request);
+            if (request.PermissionId <= 0)
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify a valid Permission ID.";
+                return BadRequest(response);
+            }
+
+            if (string.IsNullOrEmpty(request.PermissionName))
+            {
+                response.isSuccess = false;
+                response.Message = "Please specify Permission Name.";
+                return BadRequest(response);
+            }
+
+            response = db.EditPermission(request);
             return response.isSuccess ? Ok(response) : BadRequest(response);
         }
 
-
         [Authorize(Roles = "Admin")]
         [HttpPost("AssignUserRole")]
-        public ObjectResult AssignUserRole([FromBody] AssignUserRoleRequest request)
+        public IActionResult AssignUserRole([FromBody] AssignUserRoleRequest request)
         {
-            if (!ModelState.IsValid)
-                return new BadRequestObjectResult(ModelState);
+            var response = new AssignUserRoleResponse();
 
-            var response = db.AssignRoleToUser(request);
-            return response.isSuccess
-                ? new OkObjectResult(response)
-                : new BadRequestObjectResult(response);
+            if (string.IsNullOrEmpty(request.UserId))
+            {
+            response.isSuccess = false;
+            response.Message = "Please specify a valid User ID.";
+            return BadRequest(response);
+            }
+
+            if (string.IsNullOrEmpty(request.RoleId))
+            {
+            response.isSuccess = false;
+            response.Message = "Please specify a valid Role ID.";
+            return BadRequest(response);
+            }
+
+            response = db.AssignRoleToUser(request);
+            return response.isSuccess ? Ok(response) : BadRequest(response);
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpGet("Customers")]
+        [HttpPost("GetAllCustomers")]
         public IActionResult GetAllCustomers()
         {
             var response = db.GetUsersByRole("Customer");
@@ -548,7 +773,7 @@ namespace BaseCode.Controllers
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpGet("Admins")]
+        [HttpPost("GetAllAdmins")]
         public IActionResult GetAllAdmins()
         {
             var response = db.GetUsersByRole("Admin");
@@ -556,7 +781,7 @@ namespace BaseCode.Controllers
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpGet("Users/Search")]
+        [HttpPost("SearchUser")]
         public IActionResult SearchUsers([FromQuery] string searchTerm, [FromQuery] string status = null)
         {
             if (string.IsNullOrWhiteSpace(searchTerm))
@@ -565,20 +790,26 @@ namespace BaseCode.Controllers
             var response = db.SearchUsers(searchTerm, status);
             return response.isSuccess ? Ok(response) : BadRequest(response);
         }
-
         [Authorize(Roles = "Admin")]
-        [HttpPost("Users/RemoveRole")]
+        [HttpPost("RemoveUserRole")]
         public IActionResult RemoveRoleFromUser([FromBody] RemoveRoleRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            if (request.UserId <= 0)
+            {
+                return BadRequest(new { isSuccess = false, Message = "Please specify a valid User ID." });
+            }
+
+            if (request.RoleId <= 0)
+            {
+                return BadRequest(new { isSuccess = false, Message = "Please specify a valid Role ID." });
+            }
 
             var response = db.RemoveRoleFromUser(request.UserId, request.RoleId);
             return response.isSuccess ? Ok(response) : BadRequest(response);
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpGet("Sessions")]
+        [HttpPost("GetActiveSessions")]
         public IActionResult GetActiveSessions()
         {
             var response = db.GetActiveSessions();
@@ -586,18 +817,20 @@ namespace BaseCode.Controllers
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpPost("Users/InvalidateSessions")]
+        [HttpPost("InvalidateUserSessions")]
         public IActionResult InvalidateUserSessions([FromBody] InvalidateSessionsRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            if (request.UserId <= 0)
+            {
+                return BadRequest(new { isSuccess = false, Message = "Please specify a valid User ID." });
+            }
 
             var response = db.InvalidateUserSessions(request.UserId);
             return response.isSuccess ? Ok(response) : BadRequest(response);
         }
 
         [Authorize(Roles = "Admin")]
-        [HttpGet("Statistics")]
+        [HttpPost("GetUserStatistics")]
         public IActionResult GetUserStatistics()
         {
             var response = db.GetUserStatistics();
@@ -608,8 +841,15 @@ namespace BaseCode.Controllers
         [HttpPost("ChangePassword")]
         public IActionResult ChangePassword([FromBody] ChangePasswordRequest request)
         {
-            if (!ModelState.IsValid)
-                return BadRequest(ModelState);
+            if (string.IsNullOrEmpty(request.CurrentPassword))
+            {
+                return BadRequest(new { isSuccess = false, Message = "Please specify your current password." });
+            }
+
+            if (string.IsNullOrEmpty(request.NewPassword))
+            {
+                return BadRequest(new { isSuccess = false, Message = "Please specify a new password." });
+            }
 
             try
             {
