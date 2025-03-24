@@ -6,6 +6,7 @@ using MySql.Data.MySqlClient;
 using System;
 using System.Collections.Generic;
 using System.Data;
+using BaseCode.Models.Enums;
 
 namespace BaseCode.Services
 {
@@ -298,14 +299,20 @@ namespace BaseCode.Services
                 // Skip (PageNumber-1) * PageSize records and take PageSize records
                 int skip = (request.PageNumber - 1) * request.PageSize;
                 
-                string query = @"
+                // Determine sort column based on SortBy enum
+                string sortColumn = GetSortColumn(request.SortBy);
+                
+                // Determine sort direction
+                string sortDirection = request.SortDirection == SortDirection.Ascending ? "ASC" : "DESC";
+                
+                string query = $@"
                     SELECT 
                         CAR_ID, CAR_MODEL, CAR_BRAND, CAR_HORSEPOWER,
                         CAR_SEATER, CAR_COLOR, CAR_PRICE, CAR_STATUS,
                         CAR_CREATE_DATE, CAR_UPDATE_DATE
                     FROM CAR
                     WHERE CAR_STATUS = 'A'
-                    ORDER BY CAR_ID ASC
+                    ORDER BY {sortColumn} {sortDirection}
                     LIMIT @PageSize OFFSET @Skip";
 
                 var parameters = new MySqlParameter[]
@@ -331,6 +338,23 @@ namespace BaseCode.Services
             }
 
             return response;
+        }
+
+        // Helper method to get the appropriate database column for sorting
+        private string GetSortColumn(SortBy sortBy)
+        {
+            return sortBy switch
+            {
+                SortBy.Id => "CAR_ID",
+                SortBy.Brand => "CAR_BRAND",
+                SortBy.Model => "CAR_MODEL",
+                SortBy.Price => "CAR_PRICE",
+                SortBy.Horsepower => "CAR_HORSEPOWER",
+                SortBy.Seater => "CAR_SEATER",
+                SortBy.Color => "CAR_COLOR",
+                SortBy.CreateDate => "CAR_CREATE_DATE",
+                _ => "CAR_ID"
+            };
         }
     }
 }
