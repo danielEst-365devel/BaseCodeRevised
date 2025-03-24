@@ -275,5 +275,62 @@ namespace BaseCode.Services
             
             return response;
         }
+
+        public PaginatedCarsResponse GetPaginatedCars(GetPaginatedCarsRequest request)
+        {
+            var response = new PaginatedCarsResponse
+            {
+                CurrentPage = request.PageNumber,
+                PageSize = request.PageSize
+            };
+
+            try
+            {
+                // First, get the total count of active cars
+                string countQuery = "SELECT COUNT(*) FROM CAR WHERE CAR_STATUS = 'A'";
+                
+                int totalRecords = Convert.ToInt32(_dbContext.ExecuteScalar(countQuery));
+                response.TotalRecords = totalRecords;
+                
+                // Calculate total pages
+                response.TotalPages = (int)Math.Ceiling(totalRecords / (double)request.PageSize);
+                
+                // Skip (PageNumber-1) * PageSize records and take PageSize records
+                int skip = (request.PageNumber - 1) * request.PageSize;
+                
+                string query = @"
+                    SELECT 
+                        CAR_ID, CAR_MODEL, CAR_BRAND, CAR_HORSEPOWER,
+                        CAR_SEATER, CAR_COLOR, CAR_PRICE, CAR_STATUS,
+                        CAR_CREATE_DATE, CAR_UPDATE_DATE
+                    FROM CAR
+                    WHERE CAR_STATUS = 'A'
+                    ORDER BY CAR_ID ASC
+                    LIMIT @PageSize OFFSET @Skip";
+
+                var parameters = new MySqlParameter[]
+                {
+                    new MySqlParameter("@PageSize", request.PageSize),
+                    new MySqlParameter("@Skip", skip)
+                };
+
+                var dataTable = _dbContext.ExecuteQuery(query, parameters);
+                
+                foreach (DataRow row in dataTable.Rows)
+                {
+                    response.Cars.Add(Cars.FromDataRow(row));
+                }
+
+                response.IsSuccess = true;
+                response.Message = $"Retrieved page {request.PageNumber} of {response.TotalPages} (Total records: {totalRecords})";
+            }
+            catch (Exception ex)
+            {
+                response.IsSuccess = false;
+                response.Message = $"Error retrieving paginated cars: {ex.Message}";
+            }
+
+            return response;
+        }
     }
 }

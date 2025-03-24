@@ -454,6 +454,25 @@ namespace BaseCode.Controllers
             return serviceResponse.IsSuccess ? Ok(serviceResponse) : BadRequest(serviceResponse);
         }
 
+        [HttpPost("GetPaginatedCars")]
+        public IActionResult GetPaginatedCars([FromBody] GetPaginatedCarsRequest request)
+        {
+            // Default to page 1 if not specified
+            if (request.PageNumber <= 0)
+            {
+                request.PageNumber = 1;
+            }
+            
+            // Default to 15 per page if not specified or invalid
+            if (request.PageSize <= 0 || request.PageSize > 100)
+            {
+                request.PageSize = 15;
+            }
+
+            var response = _carService.GetPaginatedCars(request);
+            return response.IsSuccess ? Ok(response) : BadRequest(response);
+        }
+
         #endregion
 
 
