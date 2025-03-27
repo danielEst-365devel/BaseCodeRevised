@@ -6,16 +6,19 @@ using BaseCode.Models.Tables;
 using BaseCode.Models.Dealership.Requests;
 using BaseCode.Models.Dealership.Responses;
 using BaseCode.Models.Enums;
+using BaseCode.Services;
 
 namespace BaseCode.Models
 {
     public class DealershipDBContext
     {
         public string ConnectionString { get; set; }
+        private readonly ApiLogService _apiLogService;
 
-        public DealershipDBContext(string connectionString)
+        public DealershipDBContext(string connectionString, ApiLogService apiLogService = null)
         {
             ConnectionString = connectionString;
+            _apiLogService = apiLogService;
         }
 
         public MySqlConnection GetConnection()
@@ -23,9 +26,6 @@ namespace BaseCode.Models
             return new MySqlConnection(ConnectionString);
         }
 
-        /// <summary>
-        /// Executes a SQL query and returns the results in a DataTable
-        /// </summary>
         public DataTable ExecuteQuery(string query, MySqlParameter[] parameters = null)
         {
             var dataTable = new DataTable();
@@ -124,6 +124,7 @@ namespace BaseCode.Models
 
         public GetAllCarsResponse GetAllCars()
         {
+            string traceId = _apiLogService?.LogApiCall("GetAllCars", null);
             var response = new GetAllCarsResponse
             {
                 Cars = new List<Cars>()
@@ -156,11 +157,13 @@ namespace BaseCode.Models
                 response.Message = $"Error retrieving cars: {ex.Message}";
             }
 
+            _apiLogService?.UpdateApiLog(traceId, response);
             return response;
         }
 
         public GetCarResponse GetCarById(GetCarByIdRequest request)
         {
+            string traceId = _apiLogService?.LogApiCall("GetCarById", request);
             var response = new GetCarResponse();
 
             try
@@ -200,11 +203,13 @@ namespace BaseCode.Models
                 response.Message = $"Error retrieving car: {ex.Message}";
             }
 
+            _apiLogService?.UpdateApiLog(traceId, response);
             return response;
         }
 
         public GetCarResponse GetCarByName(GetCarByNameRequest request)
         {
+            string traceId = _apiLogService?.LogApiCall("GetCarByName", request);
             var response = new GetCarResponse { Cars = new List<Cars>() };
 
             try
@@ -240,11 +245,13 @@ namespace BaseCode.Models
                 response.Message = $"Error searching for cars: {ex.Message}";
             }
 
+            _apiLogService?.UpdateApiLog(traceId, response);
             return response;
         }
         
         public BasicResponse CreateCar(CreateCarRequest request)
         {
+            string traceId = _apiLogService?.LogApiCall("CreateCar", request);
             var response = new BasicResponse();
             
             try
@@ -287,11 +294,13 @@ namespace BaseCode.Models
                 response.Message = $"Error creating car: {ex.Message}";
             }
             
+            _apiLogService?.UpdateApiLog(traceId, response);
             return response;
         }
         
         public BasicResponse UpdateCar(UpdateCarRequest request)
         {
+            string traceId = _apiLogService?.LogApiCall("UpdateCar", request);
             var response = new BasicResponse();
             
             try
@@ -337,11 +346,13 @@ namespace BaseCode.Models
                 response.Message = $"Error updating car: {ex.Message}";
             }
             
+            _apiLogService?.UpdateApiLog(traceId, response);
             return response;
         }
         
         public BasicResponse DeleteCar(int carId)
         {
+            string traceId = _apiLogService?.LogApiCall("DeleteCar", new { CarId = carId });
             var response = new BasicResponse();
             
             try
@@ -377,11 +388,13 @@ namespace BaseCode.Models
                 response.Message = $"Error deleting car: {ex.Message}";
             }
             
+            _apiLogService?.UpdateApiLog(traceId, response);
             return response;
         }
 
         public PaginatedCarsResponse GetPaginatedCars(GetPaginatedCarsRequest request)
         {
+            string traceId = _apiLogService?.LogApiCall("GetPaginatedCars", request);
             var response = new PaginatedCarsResponse
             {
                 CurrentPage = request.PageNumber,
@@ -440,6 +453,7 @@ namespace BaseCode.Models
                 response.Message = $"Error retrieving paginated cars: {ex.Message}";
             }
 
+            _apiLogService?.UpdateApiLog(traceId, response);
             return response;
         }
 

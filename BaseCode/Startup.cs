@@ -1,4 +1,5 @@
 using BaseCode.Models;
+using BaseCode.Services;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -41,10 +42,6 @@ namespace BaseCode
 
             var dealershipConn = $"Server={dealership_host};Port={dealership_port};Database={dealership_name};Uid={dealership_user};Pwd={dealership_password};Convert Zero Datetime=True";
 
-            // Log the connection strings for debugging purposes
-            // Console.WriteLine($"Primary Connection String: {conn}");
-            // Console.WriteLine($"Dealership Connection String: {dealershipConn}");
-
             // Build a new configuration that includes both connection strings
             var connectionStringConfig = new Dictionary<string, string>
             {
@@ -57,13 +54,24 @@ namespace BaseCode
                 .AddInMemoryCollection(connectionStringConfig);
             Configuration = configBuilder.Build();
 
+            // Add HTTP context accessor first so it can be used by ApiLogService
+            services.AddHttpContextAccessor();
+            
+            // Register ApiLogService before registering the database contexts
+            services.AddSingleton(provider => new ApiLogService(
+                dealershipConn,
+                provider.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>()));
+
             // Register database contexts
             services.Add(new ServiceDescriptor(typeof(DBContext), new DBContext(conn)));
             services.Add(new ServiceDescriptor(typeof(DBCrudAct), new DBCrudAct(conn, Configuration)));
-            services.Add(new ServiceDescriptor(typeof(DealershipDBContext), new DealershipDBContext(dealershipConn)));
             
-            // CarService removed as its functionality is now in DealershipDBContext
-
+            // Register DealershipDBContext with ApiLogService injection
+            services.AddSingleton(provider => 
+                new DealershipDBContext(
+                    dealershipConn, 
+                    provider.GetRequiredService<ApiLogService>()));
+            
             services.AddMvc().AddJsonOptions(o =>
             {
                 o.JsonSerializerOptions.PropertyNamingPolicy = null;
