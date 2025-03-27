@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Collections.Generic;
@@ -46,8 +47,8 @@ namespace BaseCode
             var dealershipConn = $"Server={dealership_host};Port={dealership_port};Database={dealership_name};Uid={dealership_user};Pwd={dealership_password};Convert Zero Datetime=True";
 
             // Log the connection strings for debugging purposes
-            Console.WriteLine($"Primary Connection String: {conn}");
-            Console.WriteLine($"Dealership Connection String: {dealershipConn}");
+            // Console.WriteLine($"Primary Connection String: {conn}");
+            // Console.WriteLine($"Dealership Connection String: {dealershipConn}");
 
             // Build a new configuration that includes both connection strings
             var connectionStringConfig = new Dictionary<string, string>
@@ -117,6 +118,7 @@ namespace BaseCode
             {
                 endpoints.MapControllers();
             });
+
         }
     }
 }
