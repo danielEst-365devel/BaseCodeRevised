@@ -19,7 +19,6 @@ using System.Text;
 using System.Threading.Tasks;
 using BaseCode.Models.Dealership.Requests;
 using BaseCode.Models.Dealership.Responses;
-using BaseCode.Services;
 
 namespace BaseCode.Controllers
 {
@@ -31,20 +30,20 @@ namespace BaseCode.Controllers
         private readonly IWebHostEnvironment hostingEnvironment;
         private IHttpContextAccessor _IPAccess;
         private readonly IConfiguration _configuration;
-        private readonly CarService _carService;
+        private readonly DealershipDBContext _dealershipDB; // Changed from CarService to DealershipDBContext
 
         private static readonly string[] Summaries = new[]
        {
             "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
         };
 
-        public BaseCodeCrudController(DBCrudAct context, IWebHostEnvironment environment, IHttpContextAccessor accessor, IConfiguration configuration, CarService carService)
+        public BaseCodeCrudController(DBCrudAct context, IWebHostEnvironment environment, IHttpContextAccessor accessor, IConfiguration configuration, DealershipDBContext dealershipDB)
         {
             _IPAccess = accessor;
             db = context;
             hostingEnvironment = environment;
             _configuration = configuration;
-            _carService = carService;
+            _dealershipDB = dealershipDB; // Changed from _carService to _dealershipDB
         }
 
         [HttpGet]
@@ -294,7 +293,7 @@ namespace BaseCode.Controllers
         [HttpPost("GetCars")]
         public IActionResult GetAllCars()
         {
-            var response = _carService.GetAllCars();
+            var response = _dealershipDB.GetAllCars(); // Changed from _carService to _dealershipDB
             return response.IsSuccess ? Ok(response) : BadRequest(response);
         }
 
@@ -310,7 +309,7 @@ namespace BaseCode.Controllers
                 return BadRequest(response);
             }
 
-            var serviceResponse = _carService.GetCarById(request);
+            var serviceResponse = _dealershipDB.GetCarById(request); // Changed from _carService to _dealershipDB
             return serviceResponse.IsSuccess ? Ok(serviceResponse) : BadRequest(serviceResponse);
         }
 
@@ -326,7 +325,7 @@ namespace BaseCode.Controllers
                 return BadRequest(response);
             }
 
-            var serviceResponse = _carService.GetCarByName(request);
+            var serviceResponse = _dealershipDB.GetCarByName(request); // Changed from _carService to _dealershipDB
             return serviceResponse.IsSuccess ? Ok(serviceResponse) : BadRequest(serviceResponse);
         }
 
@@ -373,7 +372,7 @@ namespace BaseCode.Controllers
                 return BadRequest(response);
             }
 
-            var serviceResponse = _carService.CreateCar(request);
+            var serviceResponse = _dealershipDB.CreateCar(request); // Changed from _carService to _dealershipDB
             return serviceResponse.IsSuccess ? Ok(serviceResponse) : BadRequest(serviceResponse);
         }
 
@@ -426,7 +425,7 @@ namespace BaseCode.Controllers
                 return BadRequest(response);
             }
 
-            var serviceResponse = _carService.UpdateCar(request);
+            var serviceResponse = _dealershipDB.UpdateCar(request); // Changed from _carService to _dealershipDB
             return serviceResponse.IsSuccess ? Ok(serviceResponse) : BadRequest(serviceResponse);
         }
 
@@ -450,7 +449,7 @@ namespace BaseCode.Controllers
                 return BadRequest(response);
             }
 
-            var serviceResponse = _carService.DeleteCar(carId);
+            var serviceResponse = _dealershipDB.DeleteCar(carId); // Changed from _carService to _dealershipDB
             return serviceResponse.IsSuccess ? Ok(serviceResponse) : BadRequest(serviceResponse);
         }
 
@@ -469,7 +468,7 @@ namespace BaseCode.Controllers
                 request.PageSize = 15;
             }
 
-            var response = _carService.GetPaginatedCars(request);
+            var response = _dealershipDB.GetPaginatedCars(request); // Changed from _carService to _dealershipDB
             return response.IsSuccess ? Ok(response) : BadRequest(response);
         }
 

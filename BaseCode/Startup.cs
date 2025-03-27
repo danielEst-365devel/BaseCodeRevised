@@ -1,18 +1,13 @@
 using BaseCode.Models;
-using BaseCode.Services;
-using Jose;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Collections.Generic;
-using System.Text;
 
 namespace BaseCode
 {
@@ -67,8 +62,7 @@ namespace BaseCode
             services.Add(new ServiceDescriptor(typeof(DBCrudAct), new DBCrudAct(conn, Configuration)));
             services.Add(new ServiceDescriptor(typeof(DealershipDBContext), new DealershipDBContext(dealershipConn)));
             
-            // Register services
-            services.AddScoped<CarService>();
+            // CarService removed as its functionality is now in DealershipDBContext
 
             services.AddMvc().AddJsonOptions(o =>
             {
@@ -118,7 +112,6 @@ namespace BaseCode
             {
                 endpoints.MapControllers();
             });
-
         }
     }
 }
