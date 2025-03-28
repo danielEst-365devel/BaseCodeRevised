@@ -30,7 +30,7 @@ namespace BaseCode.Controllers
         private readonly IWebHostEnvironment hostingEnvironment;
         private IHttpContextAccessor _IPAccess;
         private readonly IConfiguration _configuration;
-        private readonly DealershipDBContext _dealershipDB; // Changed from CarService to DealershipDBContext
+        private readonly DealershipDBContext _dealershipDB; 
 
         private static readonly string[] Summaries = new[]
        {
@@ -43,7 +43,7 @@ namespace BaseCode.Controllers
             db = context;
             hostingEnvironment = environment;
             _configuration = configuration;
-            _dealershipDB = dealershipDB; // Changed from _carService to _dealershipDB
+            _dealershipDB = dealershipDB;
         }
 
         [HttpGet]

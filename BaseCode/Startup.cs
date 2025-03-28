@@ -56,28 +56,42 @@ namespace BaseCode
 
             // Add HTTP context accessor first so it can be used by ApiLogService
             services.AddHttpContextAccessor();
-            
-            // Register ApiLogService before registering the database contexts
-            services.AddSingleton(provider => new ApiLogService(
+
+            // Register two separate ApiLogService instances for BASE and DEALERSHIP databases
+            // 1. Create a BASE database ApiLogService
+            services.AddSingleton<BaseApiLogService>(provider => new BaseApiLogService(
+                conn,
+                provider.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>()));
+
+            // 2. Create a DEALERSHIP database ApiLogService
+            services.AddSingleton<DealershipApiLogService>(provider => new DealershipApiLogService(
                 dealershipConn,
                 provider.GetRequiredService<Microsoft.AspNetCore.Http.IHttpContextAccessor>()));
 
             // Register database contexts
             services.Add(new ServiceDescriptor(typeof(DBContext), new DBContext(conn)));
-            services.Add(new ServiceDescriptor(typeof(DBCrudAct), new DBCrudAct(conn, Configuration)));
-            
-            // Register DealershipDBContext with ApiLogService injection
-            services.AddSingleton(provider => 
+
+            // Update DBCrudAct registration to include BASE ApiLogService
+            services.Add(new ServiceDescriptor(
+                typeof(DBCrudAct),
+                provider => new DBCrudAct(
+                    conn,
+                    Configuration,
+                    provider.GetRequiredService<BaseApiLogService>()
+                ),
+                ServiceLifetime.Singleton));
+
+            // Register DealershipDBContext with DEALERSHIP ApiLogService
+            services.AddSingleton(provider =>
                 new DealershipDBContext(
-                    dealershipConn, 
-                    provider.GetRequiredService<ApiLogService>()));
-            
+                    dealershipConn,
+                    provider.GetRequiredService<DealershipApiLogService>()));
+
             services.AddMvc().AddJsonOptions(o =>
             {
                 o.JsonSerializerOptions.PropertyNamingPolicy = null;
                 o.JsonSerializerOptions.DictionaryKeyPolicy = null;
             });
-            services.AddHttpContextAccessor();
 
             // Add session-based authentication with JWT
             services.AddAuthentication("SessionAuth")
@@ -121,5 +135,18 @@ namespace BaseCode
                 endpoints.MapControllers();
             });
         }
+    }
+
+    // Create specialized ApiLogService classes to differentiate between BASE and DEALERSHIP
+    public class BaseApiLogService : ApiLogService
+    {
+        public BaseApiLogService(string connectionString, Microsoft.AspNetCore.Http.IHttpContextAccessor httpContextAccessor)
+            : base(connectionString, httpContextAccessor) { }
+    }
+
+    public class DealershipApiLogService : ApiLogService
+    {
+        public DealershipApiLogService(string connectionString, Microsoft.AspNetCore.Http.IHttpContextAccessor httpContextAccessor)
+            : base(connectionString, httpContextAccessor) { }
     }
 }

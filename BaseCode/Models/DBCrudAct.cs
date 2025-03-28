@@ -2,11 +2,13 @@
 using BaseCode.Models.Responses.forCrudAct;
 using BaseCode.Models.Tables;
 using BaseCode.Utils;
-using Microsoft.AspNetCore.Authorization;
+using BaseCode.Services;
+ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using MySql.Data.MySqlClient;
+using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -23,12 +25,15 @@ namespace BaseCode.Models
     {
         public string ConnectionString { get; set; }
         private readonly IConfiguration _configuration;
+        private readonly ApiLogService _apiLogService; // Add ApiLogService field
 
-        public DBCrudAct(string connStr, IConfiguration configuration)
+        public DBCrudAct(string connStr, IConfiguration configuration, ApiLogService apiLogService = null) // Make apiLogService optional for backward compatibility
         {
             this.ConnectionString = connStr;
             _configuration = configuration;
+            _apiLogService = apiLogService;
         }
+
         private MySqlConnection GetConnection()
         {
             return new MySqlConnection(ConnectionString);
@@ -52,6 +57,14 @@ namespace BaseCode.Models
         public CreateUserResponse CreateUser(CreateUserRequest r)
         {
             CreateUserResponse resp = new CreateUserResponse();
+            string traceId = null;
+
+            // Log API call with parameters
+            if (_apiLogService != null)
+            {
+                traceId = _apiLogService.LogApiCall("CreateUser", r);
+            }
+
             try
             {
                 using (MySqlConnection conn = GetConnection())
@@ -147,6 +160,13 @@ namespace BaseCode.Models
                 resp.isSuccess = false;
                 resp.Message = "User creation failed: " + ex.Message;
             }
+
+            // Log API response
+            if (_apiLogService != null && traceId != null)
+            {
+                _apiLogService.UpdateApiLog(traceId, resp);
+            }
+
             return resp;
         }
 
